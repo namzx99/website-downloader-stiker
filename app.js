@@ -38,11 +38,16 @@ async function startDl() {
     let resultData = null;
 
     if (S.platform === 'tiktok') {
-      // PERBAIKAN: Gunakan Tiklydown via CorsProxy / API alternatif (TikWM)
+      // 🚀 OPSI 1: API TIKWM via Proxy CORS yang Reliable (allorigins.win)
       try {
-        // Opsi 1: API TikWM (sangat stabil untuk client-side web)
-        const res = await fetch(`https://www.tikwm.com/api/?url=${encodeURIComponent(url)}`);
-        const data = await res.json();
+        const targetUrl = `https://www.tikwm.com/api/?url=${encodeURIComponent(url)}`;
+        const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(targetUrl)}`;
+        
+        const res = await fetch(proxyUrl);
+        if (!res.ok) throw new Error('Proxy server error');
+        
+        const proxyData = await res.json();
+        const data = JSON.parse(proxyData.contents); // AllOrigins membungkus JSON di field 'contents'
 
         if (data && data.code === 0 && data.data) {
           const d = data.data;
@@ -56,13 +61,16 @@ async function startDl() {
             ].filter(l => l.url)
           };
         } else {
-          throw new Error('Gagal memproses dengan TikWM');
+          throw new Error('Gagal memproses data TikTok');
         }
       } catch (errPrimary) {
-        // Opsi 2: Fallback ke CorsProxy + Tiklydown
-        const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(`https://api.tiklydown.eu.org/api/download?url=${url}`)}`;
-        const res2 = await fetch(proxyUrl);
-        const data2 = await res2.json();
+        // 🚀 OPSI 2: Fallback ke API Tiklydown via AllOrigins
+        const targetUrl2 = `https://api.tiklydown.eu.org/api/download?url=${encodeURIComponent(url)}`;
+        const proxyUrl2 = `https://api.allorigins.win/get?url=${encodeURIComponent(targetUrl2)}`;
+        
+        const res2 = await fetch(proxyUrl2);
+        const proxyData2 = await res2.json();
+        const data2 = JSON.parse(proxyData2.contents);
 
         if (data2 && data2.status !== false) {
           resultData = {
@@ -75,7 +83,7 @@ async function startDl() {
             ].filter(l => l.url)
           };
         } else {
-          throw new Error('Gagal mengambil data dari semua server downloader.');
+          throw new Error('Semua API Downloader sedang tidak menanggapi.');
         }
       }
     } else {
