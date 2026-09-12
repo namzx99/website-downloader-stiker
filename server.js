@@ -560,12 +560,16 @@ process.on('unhandledRejection', err => {
   process.exit(1);
 });
 
-const server = app.listen(PORT, () => console.log(`\n  ⚡ XV10 AI v6 → http://localhost:${PORT}\n`));
-server.on('error', err => {
-  if (err.code === 'EADDRINUSE') {
-    console.error(`\n❌ Port ${PORT} udah dipakai proses lain! Tutup dulu proses node yang lama (Task Manager → cari "node.exe" → End Task), atau ganti PORT.\n`);
-  } else {
-    console.error('\n❌ Gagal start server:\n', err);
-  }
-  process.exit(1);
-});
+module.exports = app;
+
+if (require.main === module) {
+  const server = app.listen(PORT, () => console.log(`\n  ⚡ XV10 Downloader v6 → http://localhost:${PORT}\n`));
+  server.on('error', err => {
+    if (err.code === 'EADDRINUSE') {
+      console.error(`\n❌ Port ${PORT} udah dipakai proses lain! Tutup dulu proses node yang lama (Task Manager → cari "node.exe" → End Task), atau ganti PORT.\n`);
+    } else {
+      console.error('\n❌ Gagal start server:\n', err);
+    }
+    process.exit(1);
+  });
+}
