@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no"/>
+  <meta name="theme-color" content="#07080f"/>
+  <title>XV10 Downloader</title>
+  <link rel="stylesheet" href="style.css"/>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css"/>
+</head>
+<body>
+
+<!-- BG -->
+<div class="bg-scene">
+  <div class="orb o1"></div>
+  <div class="orb o2"></div>
+  <div class="orb o3"></div>
+</div>
+
+<!-- ══ SIDEBAR (desktop) ══ -->
+<aside class="sidebar" id="sidebar">
+  <div class="sb-top">
+    <div class="sb-logo">
+      <div class="sb-logo-mark"><i class="fa-solid fa-bolt"></i></div>
+      <div>
+        <div class="sb-logo-name">XV10 <span>Downloader</span></div>
+        <div class="sb-logo-sub">by Faiz</div>
+      </div>
+    </div>
+    <nav class="sb-nav">
+      <button class="sb-link" data-p="maker"><i class="fa-solid fa-layer-group"></i><span>Stiker & BRAT</span></button>
+      <button class="sb-link active" data-p="dl"><i class="fa-solid fa-circle-arrow-down"></i><span>XV10 Downloader</span></button>
+    </nav>
+  </div>
+  <div class="sb-user">
+    <div class="sb-av">F</div>
+    <div class="sb-uinfo"><span class="sb-uname">Faiz</span><span class="sb-ubadge">Pro ✦</span></div>
+    <div class="sb-online"></div>
+  </div>
+</aside>
+
+<div class="mob-overlay" id="mobOverlay"></div>
+
+<!-- ══ TOPBAR (mobile) ══ -->
+<header class="topbar" id="topbar">
+  <button class="topbar-btn" id="menuBtn"><i class="fa-solid fa-bars"></i></button>
+  <div class="topbar-logo">XV10 <span>Downloader</span></div>
+</header>
+
+<!-- ══ MAIN ══ -->
+<main class="main">
+
+  <!-- ▸ CHAT PAGE ◂ -->
+  <section class="page" id="page-chat">
+    <div class="pg-head">
+      <div>
+        <h1>XV10 Downloader</h1>
+        <p>Gemini 1.5 · GPT-4o mini</p>
+      </div>
+      <div class="pg-head-right">
+        <!-- Model toggle -->
+        <div class="model-toggle" id="modelToggle">
+          <button class="mt-btn active" data-m="gemini"><span class="mt-dot g"></span>Gemini</button>
+          <button class="mt-btn" data-m="openai"><span class="mt-dot o"></span>GPT</button>
+        </div>
+        <button class="icon-btn" id="newChatBtn" title="Chat baru"><i class="fa-solid fa-rotate-right"></i></button>
+      </div>
+    </div>
+
+    <div class="chat-wrap">
+      <div class="chat-feed" id="chatFeed">
+        <div class="chat-intro" id="chatIntro">
+          <div class="ci-orb"><i class="fa-solid fa-bolt"></i></div>
+          <h2>Selamat datang di XV10 Downloader</h2>
+          <p>Tanya apa saja — chat, analisis gambar, buat konten, debug kode, dll.</p>
+          <div class="ci-chips">
+            <button class="chip" data-q="Buatkan caption Instagram aesthetic buat foto cafe">✍️ Caption IG</button>
+            <button class="chip" data-q="Buat 5 ide konten TikTok viral untuk brand fashion">🎬 Ide TikTok</button>
+            <button class="chip" data-q="Tulis bio Twitter yang catchy dan profesional">🐦 Bio Twitter</button>
+            <button class="chip" data-q="Buatkan slogan brand minuman boba yang kekinian">🧋 Slogan Brand</button>
+            <button class="chip" data-q="Jelaskan cara kerja AI dengan bahasa yang gampang">🤖 Tentang AI</button>
+            <button class="chip" data-q="Bantu brainstorm nama brand skincare lokal yang keren">💡 Brainstorm</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="chat-foot">
+        <div class="attach-strip" id="attachStrip"></div>
+        <div class="chat-bar">
+          <label class="cb-clip" for="chatFileIn"><i class="fa-solid fa-paperclip"></i></label>
+          <input type="file" id="chatFileIn" multiple accept="image/*,.pdf,.txt,.docx" hidden/>
+          <div class="cb-text" id="chatInput" contenteditable="true" data-ph="Ketik pesan..."></div>
+          <button class="cb-send" id="chatSend"><i class="fa-solid fa-arrow-up"></i></button>
+        </div>
+        <p class="cb-hint">Enter kirim · Shift+Enter baris baru</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ▸ MAKER PAGE ◂ -->
+  <section class="page" id="page-maker">
+    <div class="pg-head">
+      <div><h1>Stiker & BRAT</h1><p>Buat stiker teks, BRAT aesthetic, dan stiker dari foto</p></div>
+    </div>
+
+    <!-- Tab bar -->
+    <div class="tab-bar">
+      <button class="tab-btn active" data-tab="stiker"><i class="fa-solid fa-star"></i> Stiker Teks</button>
+      <button class="tab-btn" data-tab="brat"><i class="fa-solid fa-font"></i> BRAT</button>
+      <button class="tab-btn" data-tab="iqc"><i class="fa-solid fa-camera"></i> IQC Foto</button>
+    </div>
+
+    <!-- ── Stiker Teks ── -->
+    <div class="tab-pane active" id="tab-stiker">
+      <div class="maker-grid">
+        <div class="mk-form card">
+          <div class="ff"><label>Teks Stiker</label>
+            <input type="text" id="stkText" placeholder="Contoh: Gaskeun! 🔥" maxlength="40"/>
+          </div>
+          <div class="ff"><label>Ukuran Font</label>
+            <div class="slider-row">
+              <input type="range" id="stkSize" min="20" max="110" value="60" class="sl"/>
+              <span class="sl-val" id="stkSizeVal">60</span>
+            </div>
+          </div>
+          <div class="ff"><label>Warna Teks</label>
+            <div class="clr-row">
+              <input type="color" id="stkColor" value="#ffffff"/>
+              <div class="clr-presets">
+                <span class="cp active" data-c="#ffffff" style="background:#fff;border:1px solid #555"></span>
+                <span class="cp" data-c="#000000" style="background:#000"></span>
+                <span class="cp" data-c="#ff6b6b" style="background:#ff6b6b"></span>
+                <span class="cp" data-c="#ffd93d" style="background:#ffd93d"></span>
+                <span class="cp" data-c="#6bcb77" style="background:#6bcb77"></span>
+                <span class="cp" data-c="#4d96ff" style="background:#4d96ff"></span>
+                <span class="cp" data-c="#ff6ef7" style="background:#ff6ef7"></span>
+              </div>
+            </div>
+          </div>
+          <div class="ff"><label>Background</label>
+            <div class="bg-grid" id="bgGrid">
+              <button class="bg-opt active" data-bg="transparent"><div class="bg-prev checker"></div><span>Transparan</span></button>
+              <button class="bg-opt" data-bg="solid"><div class="bg-prev" id="solidPrev" style="background:#7c6fff"></div><span>Warna</span></button>
+              <button class="bg-opt" data-bg="g1"><div class="bg-prev" style="background:linear-gradient(135deg,#667eea,#764ba2)"></div><span>Purple</span></button>
+              <button class="bg-opt" data-bg="g2"><div class="bg-prev" style="background:linear-gradient(135deg,#f093fb,#f5576c)"></div><span>Pink</span></button>
+              <button class="bg-opt" data-bg="g3"><div class="bg-prev" style="background:linear-gradient(135deg,#4facfe,#00f2fe)"></div><span>Ocean</span></button>
+              <button class="bg-opt" data-bg="g4"><div class="bg-prev" style="background:linear-gradient(135deg,#43e97b,#38f9d7)"></div><span>Mint</span></button>
+              <button class="bg-opt" data-bg="g5"><div class="bg-prev" style="background:linear-gradient(135deg,#fa8231,#f7b731)"></div><span>Fire</span></button>
+              <button class="bg-opt" data-bg="g6"><div class="bg-prev" style="background:linear-gradient(135deg,#2d3436,#636e72)"></div><span>Dark</span></button>
+            </div>
+            <input type="color" id="solidColor" value="#7c6fff" style="display:none;margin-top:8px;width:100%;height:36px;border-radius:8px"/>
+          </div>
+          <div class="ff"><label>Outline Teks</label>
+            <div class="slider-row">
+              <input type="range" id="stkOutline" min="0" max="10" value="3" class="sl"/>
+              <input type="color" id="stkOutlineColor" value="#000000"/>
+            </div>
+          </div>
+          <div class="ff"><label>Gaya Font</label>
+            <div class="pill-row" id="fontStylePills">
+              <button class="pill active" data-fw="800" data-fs="normal">Bold</button>
+              <button class="pill" data-fw="400" data-fs="normal">Regular</button>
+              <button class="pill" data-fw="800" data-fs="italic">Bold Italic</button>
+              <button class="pill" data-fw="400" data-fs="italic">Italic</button>
+            </div>
+          </div>
+          <div class="ff"><label>Ukuran Canvas</label>
+            <select id="stkCanvas">
+              <option value="512">512×512 (Stiker)</option>
+              <option value="1080">1080×1080 (IG Post)</option>
+              <option value="800">800×800 (Medium)</option>
+            </select>
+          </div>
+          <button class="btn-action" id="btnMakeStiker"><i class="fa-solid fa-star"></i> Buat Stiker</button>
+        </div>
+
+        <div class="mk-result">
+          <div class="canvas-box" id="stikerBox">
+            <canvas id="stikerCanvas" width="512" height="512"></canvas>
+            <div class="canvas-ph" id="stikerPh"><i class="fa-solid fa-star"></i><p>Preview stiker</p></div>
+          </div>
+          <div class="mk-actions" id="stikerActions" style="display:none">
+            <button class="btn-dl" id="btnDlStiker"><i class="fa-solid fa-download"></i> Download PNG</button>
+            <button class="btn-dl secondary" id="btnDlStikerWp"><i class="fa-solid fa-download"></i> WebP</button>
+            <button class="btn-dl secondary" id="btnShareStiker"><i class="fa-brands fa-whatsapp"></i> Kirim ke WA</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── BRAT ── -->
+    <div class="tab-pane" id="tab-brat">
+      <div class="maker-grid">
+        <div class="mk-form card">
+          <div class="ff"><label>Teks BRAT</label>
+            <input type="text" id="bratText" placeholder="tulis apa aja..." maxlength="50"/>
+          </div>
+          <div class="ff"><label>Tema</label>
+            <div class="brat-themes" id="bratThemes">
+              <button class="brat-th active" data-bg="#8aba62" data-fg="#000"><div class="bth-prev" style="background:#8aba62"><span style="color:#000">brat</span></div><small>Original</small></button>
+              <button class="brat-th" data-bg="#000000" data-fg="#ffffff"><div class="bth-prev" style="background:#000"><span style="color:#fff">brat</span></div><small>Dark</small></button>
+              <button class="brat-th" data-bg="#ffffff" data-fg="#000000"><div class="bth-prev" style="background:#fff;border:1px solid #eee"><span style="color:#000">brat</span></div><small>White</small></button>
+              <button class="brat-th" data-bg="#ff6b6b" data-fg="#ffffff"><div class="bth-prev" style="background:#ff6b6b"><span style="color:#fff">brat</span></div><small>Red</small></button>
+              <button class="brat-th" data-bg="#4d96ff" data-fg="#ffffff"><div class="bth-prev" style="background:#4d96ff"><span style="color:#fff">brat</span></div><small>Blue</small></button>
+              <button class="brat-th" data-bg="#ffd93d" data-fg="#000000"><div class="bth-prev" style="background:#ffd93d"><span style="color:#000">brat</span></div><small>Yellow</small></button>
+            </div>
+          </div>
+          <div class="ff-row">
+            <div class="ff"><label>BG Custom</label><input type="color" id="bratBg" value="#8aba62"/></div>
+            <div class="ff"><label>Teks Custom</label><input type="color" id="bratFg" value="#000000"/></div>
+          </div>
+          <div class="ff"><label>Rasio</label>
+            <select id="bratRatio">
+              <option value="1:1">1:1 Square</option>
+              <option value="4:5">4:5 Portrait</option>
+              <option value="9:16">9:16 Story</option>
+            </select>
+          </div>
+          <button class="btn-action" id="btnMakeBrat"><i class="fa-solid fa-font"></i> Buat BRAT</button>
+        </div>
+        <div class="mk-result">
+          <div class="canvas-box" id="bratBox">
+            <canvas id="bratCanvas" width="1080" height="1080"></canvas>
+            <div class="canvas-ph" id="bratPh"><i class="fa-solid fa-font"></i><p>Preview BRAT</p></div>
+          </div>
+          <div class="mk-actions" id="bratActions" style="display:none">
+            <button class="btn-dl" id="btnDlBrat"><i class="fa-solid fa-download"></i> Download PNG</button>
+            <button class="btn-dl secondary" id="btnShareBrat"><i class="fa-brands fa-whatsapp"></i> Kirim ke WA</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── IQC — Emoji Stiker iPhone ── -->
+    <div class="tab-pane" id="tab-iqc">
+      <div class="maker-grid">
+        <div class="mk-form card">
+          <div class="ff">
+            <label>Emoji Reaksi (pilih maks 5, urut)</label>
+            <div class="emoji-picker" id="iqcEmojiPicker"></div>
+          </div>
+          <div class="ff">
+            <label>Teks Pesan (boleh selipin emoji 🎁🙏 dari keyboard)</label>
+            <textarea id="iqcText" rows="2" placeholder="Contoh: selamat pagi 🎁🙏" maxlength="150">selamat pagi 🎁🙏</textarea>
+          </div>
+          <div class="ff-row">
+            <div class="ff">
+              <label>Jam</label>
+              <input type="text" id="iqcTime" placeholder="10:57" maxlength="6" value="10:57"/>
+            </div>
+            <div class="ff">
+              <label>Posisi Bubble</label>
+              <div class="model-toggle" id="iqcBubbleColor">
+                <button class="mt-btn active" data-c="out">Terkirim</button>
+                <button class="mt-btn" data-c="in">Diterima</button>
+              </div>
+            </div>
+          </div>
+          <div class="ff" style="flex-direction:row;align-items:center;gap:10px">
+            <input type="checkbox" id="iqcRead" checked style="width:18px;height:18px;cursor:pointer"/>
+            <label for="iqcRead" style="text-transform:none;letter-spacing:0;font-size:13px;cursor:pointer">Centang biru (sudah dibaca)</label>
+          </div>
+          <div class="ff" style="flex-direction:row;align-items:center;gap:10px">
+            <input type="checkbox" id="iqcShowMenu" checked style="width:18px;height:18px;cursor:pointer"/>
+            <label for="iqcShowMenu" style="text-transform:none;letter-spacing:0;font-size:13px;cursor:pointer">Tampilkan menu (Beri Bintang / Balas / Teruskan)</label>
+          </div>
+          <button class="btn-action" id="btnMakeIqc"><i class="fa-brands fa-whatsapp"></i> Buat IQC Stiker</button>
+        </div>
+        <div class="mk-result">
+          <div class="canvas-box" id="iqcBox" style="background:transparent;border-style:dashed">
+            <canvas id="iqcCanvas"></canvas>
+            <div class="canvas-ph" id="iqcPh"><i class="fa-solid fa-face-smile"></i><p>Preview IQC Stiker</p></div>
+          </div>
+          <div class="mk-actions" id="iqcActions" style="display:none">
+            <button class="btn-dl" id="btnDlIqc"><i class="fa-solid fa-download"></i> Download PNG</button>
+            <button class="btn-dl secondary" id="btnShareIqc"><i class="fa-brands fa-whatsapp"></i> Kirim ke WA</button>
+          </div>
+          <p style="font-size:11.5px;color:var(--t3);text-align:center;margin-top:8px">💡 Klik "Kirim ke WA" → pilih WhatsApp di menu share, gambar udah otomatis nempel</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ▸ DOWNLOADER PAGE ◂ -->
+  <section class="page" id="page-dl">
+    <div class="pg-head"><div><h1>Downloader</h1><p>TikTok · Instagram · YouTube → masuk ke device</p></div></div>
+
+    <div class="dl-wrap">
+      <div class="plat-tabs">
+        <button class="plat-tab active" data-plat="tiktok"><i class="fa-brands fa-tiktok"></i><span>TikTok</span></button>
+        <button class="plat-tab" data-plat="instagram"><i class="fa-brands fa-instagram"></i><span>Instagram</span></button>
+        <button class="plat-tab" data-plat="youtube"><i class="fa-brands fa-youtube"></i><span>YouTube</span></button>
+      </div>
+
+      <div class="dl-card card">
+        <div class="dl-top" id="dlTop">
+          <div class="dl-icon tt" id="dlIcon"><i class="fa-brands fa-tiktok"></i></div>
+          <div><h3 id="dlTitle">TikTok Downloader</h3><p id="dlSub">Download tanpa watermark</p></div>
+        </div>
+        <div class="url-row">
+          <i class="fa-solid fa-link"></i>
+          <input type="url" id="dlUrl" placeholder="Paste link video..."/>
+          <button class="paste-btn" id="dlPaste"><i class="fa-regular fa-clipboard"></i></button>
+        </div>
+        <div class="fmt-tabs">
+          <button class="fmt-tab active" data-fmt="mp4"><i class="fa-solid fa-film"></i> MP4 Video</button>
+          <button class="fmt-tab" data-fmt="mp3" id="mp3Tab"><i class="fa-solid fa-music"></i> MP3 Audio</button>
+        </div>
+        <button class="btn-action" id="dlBtn"><i class="fa-solid fa-cloud-arrow-down"></i> Proses Download</button>
+      </div>
+
+      <div class="dl-loading" id="dlLoading" style="display:none">
+        <div class="spin"></div><p>Memproses...</p>
+      </div>
+
+      <div class="dl-result card" id="dlResult" style="display:none">
+        <div class="dlr-inner">
+          <div class="dlr-thumb"><img id="dlThumb" src="" alt=""/><div class="dlr-play"><i class="fa-solid fa-play"></i></div></div>
+          <div class="dlr-info">
+            <h4 id="dlResTitle"></h4>
+            <p id="dlResMeta"></p>
+            <div class="dlr-btns" id="dlrBtns"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="dl-error card" id="dlError" style="display:none">
+        <i class="fa-solid fa-circle-exclamation"></i>
+        <p id="dlErrMsg"></p>
+        <button class="btn-sm" onclick="resetDl()">Coba Lagi</button>
+      </div>
+
+      <div class="how-box card">
+        <h4>Cara pakai</h4>
+        <div class="how-row">
+          <div class="how-step"><div class="hw-n">1</div><p>Pilih platform</p></div>
+          <div class="how-step"><div class="hw-n">2</div><p>Copy link video</p></div>
+          <div class="how-step"><div class="hw-n">3</div><p>Paste di sini</p></div>
+          <div class="how-step"><div class="hw-n">4</div><p>Klik Download</p></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<!-- ══ BOTTOM NAV (mobile) ══ -->
+<nav class="bnav" id="bnav">
+  <button class="bn" data-p="maker"><i class="fa-solid fa-layer-group"></i><span>Maker</span></button>
+  <button class="bn active" data-p="dl"><i class="fa-solid fa-download"></i><span>Downloader</span></button>
+</nav>
+
+<div class="toasts" id="toasts"></div>
+<script src="app.js"></script>
+</body>
+</html>
