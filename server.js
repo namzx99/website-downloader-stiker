@@ -128,44 +128,6 @@ app.post('/api/ai', async (req, res) => {
 });
 
 // ════════════════════════════════════════════════════════
-// GEMINI PROXY  POST /api/gemini  (jika user punya key)
-// ════════════════════════════════════════════════════════
-app.post('/api/gemini', (req, res) => {
-  const { contents, systemPrompt, apiKey } = req.body;
-  if (!contents) return res.status(400).json({ error: 'contents required' });
-  if (!apiKey)   return res.status(400).json({ error: 'Gemini API Key belum diisi.' });
-
-  const payload = JSON.stringify({
-    system_instruction: { parts: [{ text: systemPrompt || '' }] },
-    contents,
-    generationConfig: { temperature: 0.85, maxOutputTokens: 2048 },
-  });
-  const opt = {
-    hostname: 'generativelanguage.googleapis.com',
-    path: `/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`,
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(payload) },
-  };
-  const pr = https.request(opt, pres => {
-    let raw = '';
-    pres.on('data', c => (raw += c));
-    pres.on('end', () => {
-      try {
-        const j = JSON.parse(raw);
-        if (pres.statusCode !== 200) return res.status(pres.statusCode).json({ error: j?.error?.message || `HTTP ${pres.statusCode}` });
-        const text = j.candidates?.[0]?.content?.parts?.[0]?.text;
-        if (!text) return res.status(500).json({ error: 'Gemini kosong' });
-        res.json({ reply: text });
-      } catch (e) { res.status(500).json({ error: e.message }); }
-    });
-  });
-  pr.on('error', e => res.status(502).json({ error: e.message }));
-  pr.setTimeout(30000, () => { pr.destroy(); res.status(504).json({ error: 'Gemini timeout' }); });
-  pr.write(payload);
-  pr.end();
-});
-
-// ════════════════════════════════════════════════════════
 // OPENAI PROXY  POST /api/openai
 // Key dipegang di server via env var, TIDAK pernah dikirim ke browser.
 // Set env var di hosting kamu: OPENAI_API_KEY=sk-proj-xxxxx
@@ -547,6 +509,8 @@ function detectPlatform(url) {
 }
 
 app.get('/api/health', (req, res) => res.json({ ok: true, v: '6.0.0' }));
+app.get('/style.css', (req, res) => res.sendFile(path.join(__dirname, 'style.css')));
+app.get('/app.js', (req, res) => res.sendFile(path.join(__dirname, 'app.js')));
 // Catch-all buat SPA fallback — pakai regex (bukan string '*') biar kompatibel
 // dengan Express 5 juga (Express 5 ganti cara parsing wildcard string).
 app.get(/.*/, (req, res) => res.sendFile(path.join(__dirname, 'index.html')));
