@@ -24,14 +24,42 @@ const S = {
 // Wrapper fetch: kalau server backend mati / tidak bisa dihubungi (network
 // error), browser cuma bilang "Failed to fetch" tanpa detail. Kita ganti
 // jadi pesan yang jelas biar gampang di-diagnosis.
-async function apiFetch(path, opts) {
-  let res;
+async function startDl() {
+  const url = $('dlUrl').value.trim();
+  if (!url) { toast('Masukkan link video dulu!', 'error'); return; }
+  resetDlUI();
+  $('dlLoading').style.display = 'block';
+  $('dlBtn').disabled = true;
+
   try {
-    res = await fetch(`${BACKEND}${path}`, opts);
-  } catch (netErr) {
-    throw new Error(`Server backend tidak bisa dihubungi (${BACKEND}). Cek apakah server sedang nyala, dan apakah situs ini HTTPS sedangkan server HTTP (mixed content akan diblokir browser).`);
+    // Memanggil Public API Tiklydown langsung dari browser
+    const res = await fetch(`https://api.tiklydown.eu.org/api/download?url=${encodeURIComponent(url)}`);
+    
+    if (!res.ok) throw new Error(`HTTP Error status: ${res.status}`);
+    const data = await res.json();
+
+    if (!data || data.status === false) throw new Error('Gagal mengambil data video. Pastikan link TikTok valid.');
+
+    $('dlLoading').style.display = 'none';
+
+    // Render hasil ke UI
+    renderDlResult({
+      title: data.title || 'TikTok Video',
+      author: data.author?.name || 'TikTok User',
+      thumbnail: data.cover || data.dynamic_cover,
+      links: [
+        { label: 'Download Video (No WM)', url: data.video?.noWatermark || data.video?.watermark },
+        { label: 'Download Audio (MP3)', url: data.music?.play_url }
+      ].filter(l => l.url)
+    });
+  } catch (err) {
+    $('dlLoading').style.display = 'none';
+    $('dlError').style.display = 'block';
+    $('dlErrMsg').textContent = err.message;
+    toast(err.message, 'error');
+  } finally { 
+    $('dlBtn').disabled = false; 
   }
-  return res;
 }
 
 const $ = id => document.getElementById(id);
