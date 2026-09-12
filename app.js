@@ -4,19 +4,11 @@
 ═══════════════════════════════════════ */
 
 // ── CONFIG ────────────────────────────
-// PENTING: kunci OpenAI TIDAK boleh ada di file frontend (app.js) karena
-// siapa pun bisa buka DevTools dan mencurinya. Sekarang semua panggilan
-// OpenAI lewat backend (/api/openai) yang nyimpen key di env var server.
 const BACKEND = (location.hostname === 'localhost' || location.hostname === '127.0.0.1')
   ? `http://localhost:${location.port || 3000}` : location.origin;
 
-const SYS = '';
-
 // ── STATE ─────────────────────────────
 const S = {
-  oaiHist: [],
-  attachFiles: [],
-  generating: false,
   platform: 'tiktok',
   format: 'mp4',
   makerTab: 'stiker',
@@ -91,79 +83,6 @@ function closeSidebar() {
   document.getElementById('sidebar').classList.remove('open');
   $('mobOverlay').classList.remove('show');
 }
-/* ── OpenAI GPT-4o mini (lewat backend, key aman di server) ── */
-async function callOpenAI(text, files = []) {
-  const content = [];
-  for (const f of files) {
-    if (f.type.startsWith('image/')) { const b64 = await toBase64(f); content.push({ type: 'image_url', image_url: { url: `data:${f.type};base64,${b64}`, detail: 'high' } }); }
-    else content.push({ type: 'text', text: `[File: ${f.name}]\n${await f.text().catch(() => '')}` });
-  }
-  if (text) content.push({ type: 'text', text });
-  const msg = { role: 'user', content: content.length === 1 && content[0].type === 'text' ? text : content };
-  S.oaiHist.push(msg);
-
-  const res = await apiFetch('/api/openai', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ messages: S.oaiHist, system: SYS }),
-  });
-  if (!res.ok) {
-    S.oaiHist.pop();
-    const e = await res.json().catch(() => ({}));
-    let msg2 = e?.error || `HTTP ${res.status}`;
-    if (res.status === 429) msg2 = '⏳ Quota OpenAI habis. Tambah billing di platform.openai.com';
-    if (res.status === 401 || /api key/i.test(msg2)) msg2 = '🔑 OpenAI key tidak valid / belum diset di server (OPENAI_API_KEY env var).';
-    throw new Error(msg2);
-  }
-  const data = await res.json();
-  if (!data.reply) { S.oaiHist.pop(); throw new Error('OpenAI tidak merespons, coba lagi.'); }
-  S.oaiHist.push({ role: 'assistant', content: data.reply });
-  return data.reply;
-}
-
-/* ── Chat render helpers ── */
-function renderIntro() {
-  const feed = $('chatFeed');
-  const el = document.createElement('div');
-  el.id = 'chatIntro'; el.className = 'chat-intro';
-  el.innerHTML = `
-    <div class="ci-orb"><i class="fa-solid fa-bolt"></i></div>
-    <h2>Selamat datang di XV10 Downloader</h2>
-    <p>Tanya apa saja — chat, analisis gambar, buat konten, debug kode, dll.</p>
-    <div class="ci-chips">
-      <button class="chip" data-q="Buatkan caption Instagram aesthetic buat foto cafe">✍️ Caption IG</button>
-      <button class="chip" data-q="Buat 5 ide konten TikTok viral untuk brand fashion">🎬 Ide TikTok</button>
-      <button class="chip" data-q="Tulis bio Twitter yang catchy dan profesional">🐦 Bio Twitter</button>
-      <button class="chip" data-q="Buatkan slogan brand minuman boba yang kekinian">🧋 Slogan Brand</button>
-      <button class="chip" data-q="Jelaskan cara kerja AI dengan bahasa yang gampang">🤖 Tentang AI</button>
-      <button class="chip" data-q="Bantu brainstorm nama brand skincare lokal yang keren">💡 Brainstorm</button>
-    </div>`;
-  feed.appendChild(el);
-}
-function appendUserMsg(text, files) {
-  const feed = $('chatFeed');
-  const el = document.createElement('div'); el.className = 'msg user';
-  let fh = '';
-  files.forEach(f => { if (f.type.startsWith('image/')) fh += `<img src="${URL.createObjectURL(f)}" class="msg-img"/>`; else fh += `<div class="msg-file"><i class="fa-solid fa-file-lines"></i><span>${esc(f.name)}</span></div>`; });
-  el.innerHTML = `<div class="msg-av usr">U</div><div class="msg-body"><div class="mbbl">${text ? `<p>${esc(text)}</p>` : ''}${fh}<span class="msg-time">${now()}</span></div></div>`;
-  feed.appendChild(el); scrollFeed();
-}
-function appendBotMsg(md, model) {
-  const feed = $('chatFeed');
-  const el = document.createElement('div'); el.className = 'msg bot';
-  const badge = '<span class="mbadge o">GPT</span>';
-  el.innerHTML = `<div class="msg-av bot"><i class="fa-solid fa-bolt"></i></div><div class="msg-body">${badge}<div class="mbbl">${mdToHtml(md)}<span class="msg-time">${now()}</span></div></div>`;
-  feed.appendChild(el); scrollFeed();
-}
-function showTyping() {
-  const id = 'typ' + Date.now(); const feed = $('chatFeed');
-  const el = document.createElement('div'); el.className = 'msg bot'; el.id = id;
-  el.innerHTML = `<div class="msg-av bot"><i class="fa-solid fa-bolt"></i></div><div class="msg-body"><div class="mbbl"><div class="tdots"><div class="td"></div><div class="td"></div><div class="td"></div></div></div></div>`;
-  feed.appendChild(el); scrollFeed(); return id;
-}
-function removeTyping(id) { document.getElementById(id)?.remove(); }
-function scrollFeed() { const f = $('chatFeed'); setTimeout(() => { f.scrollTop = f.scrollHeight; }, 40); }
-
 /* ══════════════════════════════════════
    MAKER
 ══════════════════════════════════════ */
