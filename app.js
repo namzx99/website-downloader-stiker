@@ -15,7 +15,6 @@ const SYS = '';
 // ── STATE ─────────────────────────────
 const S = {
   oaiHist: [],
-  gemHist: [],
   attachFiles: [],
   generating: false,
   platform: 'tiktok',
@@ -79,8 +78,6 @@ function initNav() {
     $('mobOverlay').classList.add('show');
   });
   $('mobOverlay')?.addEventListener('click', closeSidebar);
-  $('newChatBtn')?.addEventListener('click', resetChat);
-  $('topNewChat')?.addEventListener('click', resetChat);
 }
 
 function goTo(p) {
@@ -94,154 +91,6 @@ function closeSidebar() {
   document.getElementById('sidebar').classList.remove('open');
   $('mobOverlay').classList.remove('show');
 }
-function resetChat() {
-  S.oaiHist = []; S.gemHist = [];
-  $('chatFeed').innerHTML = '';
-  renderIntro();
-  toast('Chat baru', 'info');
-}
-
-/* ══════════════════════════════════════
-   GEMINI KEY UI — inject ke chat page
-══════════════════════════════════════ */
-function injectGeminiKeyUI() {
-  const pgHead = document.querySelector('#page-chat .pg-head');
-  if (!pgHead) return;
-
-  const bar = document.createElement('div');
-  bar.id = 'geminiKeyBar';
-  bar.className = 'gkey-bar';
-  bar.innerHTML = `
-    <div class="gkey-inner" id="gkeyInner">
-      <i class="fa-solid fa-key"></i>
-      <span class="gkey-label">Gemini API Key:</span>
-      <input type="password" id="gkeyInput" placeholder="Paste Gemini key di sini..." value="${S.geminiKey}" autocomplete="off"/>
-      <button class="gkey-save" onclick="saveGeminiKey()">Simpan</button>
-      <a href="https://aistudio.google.com/app/apikey" target="_blank" class="gkey-link">Gratis di sini →</a>
-    </div>
-    <div class="gkey-status" id="gkeyStatus" style="display:none">
-      <i class="fa-solid fa-circle-check" style="color:#22c55e"></i>
-      <span>Gemini key aktif</span>
-      <button class="gkey-change" onclick="toggleGkeyEdit()"><i class="fa-solid fa-pen"></i> Ganti</button>
-    </div>`;
-  pgHead.after(bar);
-
-  // Show correct initial state
-  if (S.geminiKey) {
-    $('gkeyInner').style.display = 'none';
-    $('gkeyStatus').style.display = 'flex';
-  }
-}
-
-window.saveGeminiKey = () => {
-  const val = $('gkeyInput')?.value?.trim();
-  if (!val) { toast('Masukkan key dulu!', 'error'); return; }
-  S.geminiKey = val;
-  localStorage.setItem('xv10_gkey', val);
-  $('gkeyInner').style.display = 'none';
-  $('gkeyStatus').style.display = 'flex';
-  toast('Gemini key tersimpan! ✅', 'success');
-};
-window.toggleGkeyEdit = () => {
-  $('gkeyInner').style.display = 'flex';
-  $('gkeyStatus').style.display = 'none';
-  $('gkeyInput').value = S.geminiKey;
-  $('gkeyInput').focus();
-};
-
-/* ══════════════════════════════════════
-   CHAT
-══════════════════════════════════════ */
-function initChat() {
-  $('chatSend')?.addEventListener('click', sendChat);
-  $('chatInput')?.addEventListener('keydown', e => {
-    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendChat(); }
-  });
-  $('chatFileIn')?.addEventListener('change', e => {
-    Array.from(e.target.files).forEach(addAttach);
-    e.target.value = '';
-  });
-  $$('.mt-btn').forEach(b => b.addEventListener('click', () => {
-    $$('.mt-btn').forEach(x => x.classList.remove('active'));
-    b.classList.add('active');
-    S.model = b.dataset.m;
-    S.oaiHist = []; S.gemHist = [];
-    toast(`Beralih ke ${S.model === 'gemini' ? 'Gemini 1.5 Flash' : 'GPT-4o mini'}`, 'info');
-  }));
-  document.addEventListener('click', e => {
-    const chip = e.target.closest('.chip');
-    if (chip?.dataset.q) { $('chatInput').textContent = chip.dataset.q; sendChat(); }
-  });
-}
-
-function addAttach(f) { S.attachFiles.push(f); renderAttachStrip(); }
-window.removeAttach = i => { S.attachFiles.splice(i, 1); renderAttachStrip(); };
-function renderAttachStrip() {
-  const strip = $('attachStrip'); strip.innerHTML = '';
-  S.attachFiles.forEach((f, i) => {
-    const el = document.createElement('div'); el.className = 'att-item';
-    if (f.type.startsWith('image/')) el.innerHTML = `<img src="${URL.createObjectURL(f)}"/><span>${esc(f.name)}</span><button class="att-rm" onclick="removeAttach(${i})"><i class="fa-solid fa-xmark"></i></button>`;
-    else el.innerHTML = `<i class="fa-solid fa-file" style="color:var(--p2)"></i><span>${esc(f.name)}</span><button class="att-rm" onclick="removeAttach(${i})"><i class="fa-solid fa-xmark"></i></button>`;
-    strip.appendChild(el);
-  });
-}
-
-async function sendChat() {
-  const inp = $('chatInput');
-  const text = inp.textContent.trim();
-  const files = [...S.attachFiles];
-  if (!text && !files.length) return;
-  if (S.generating) return;
-  $('chatIntro')?.remove();
-  appendUserMsg(text, files);
-  inp.textContent = ''; S.attachFiles = []; renderAttachStrip();
-  S.generating = true;
-  const tid = showTyping();
-  try {
-    const reply = S.model === 'gemini' ? await callGemini(text, files) : await callOpenAI(text, files);
-    appendBotMsg(reply, S.model);
-  } catch (err) {
-    console.error('[chat]', err);
-    appendBotMsg(`❌ **Error:** ${err.message}`, S.model);
-    toast(err.message, 'error');
-  } finally {
-    removeTyping(tid);
-    S.generating = false;
-  }
-}
-
-/* ── Gemini via backend proxy ── */
-async function callGemini(text, files = []) {
-  if (!S.geminiKey) throw new Error('Gemini API Key belum diisi! Isi key di kolom di atas terlebih dahulu. Key gratis di aistudio.google.com');
-
-  const parts = [];
-  for (const f of files) {
-    if (f.type.startsWith('image/')) parts.push({ inline_data: { mime_type: f.type, data: await toBase64(f) } });
-    else parts.push({ text: `[File: ${f.name}]\n${await f.text().catch(() => '')}` });
-  }
-  if (text) parts.push({ text });
-  S.gemHist.push({ role: 'user', parts });
-
-  const res = await apiFetch('/api/gemini', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ contents: S.gemHist, systemPrompt: SYS, apiKey: S.geminiKey }),
-  });
-
-  if (!res.ok) {
-    S.gemHist.pop();
-    const e = await res.json().catch(() => ({}));
-    let msg = e?.error || `HTTP ${res.status}`;
-    if (res.status === 400 && msg.includes('API key')) msg = '🔑 Gemini API key tidak valid! Cek kembali key kamu.';
-    if (res.status === 429) msg = '⏳ Rate limit Gemini. Tunggu sebentar lalu coba lagi.';
-    throw new Error(msg);
-  }
-  const data = await res.json();
-  if (!data.reply) { S.gemHist.pop(); throw new Error('Gemini tidak merespons, coba lagi.'); }
-  S.gemHist.push({ role: 'model', parts: [{ text: data.reply }] });
-  return data.reply;
-}
-
 /* ── OpenAI GPT-4o mini (lewat backend, key aman di server) ── */
 async function callOpenAI(text, files = []) {
   const content = [];
@@ -302,7 +151,7 @@ function appendUserMsg(text, files) {
 function appendBotMsg(md, model) {
   const feed = $('chatFeed');
   const el = document.createElement('div'); el.className = 'msg bot';
-  const badge = model === 'gemini' ? '<span class="mbadge g">Gemini</span>' : '<span class="mbadge o">GPT</span>';
+  const badge = '<span class="mbadge o">GPT</span>';
   el.innerHTML = `<div class="msg-av bot"><i class="fa-solid fa-bolt"></i></div><div class="msg-body">${badge}<div class="mbbl">${mdToHtml(md)}<span class="msg-time">${now()}</span></div></div>`;
   feed.appendChild(el); scrollFeed();
 }
