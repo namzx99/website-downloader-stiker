@@ -6,7 +6,7 @@
 // ── CONFIG ────────────────────────────
 const BACKEND = (location.hostname === 'localhost' || location.hostname === '127.0.0.1')
   ? `http://localhost:${location.port || 3000}` 
-  : 'https://dynamic-blancmange-bb7818.netlify.app';
+  : 'https://namzx99.github.io/website-downloader-stiker/';
   
 // ── STATE ─────────────────────────────
 const S = {
