@@ -38,53 +38,37 @@ async function startDl() {
     let resultData = null;
 
     if (S.platform === 'tiktok') {
-      // 🚀 OPSI 1: API TIKWM via Proxy CORS yang Reliable (allorigins.win)
       try {
+        // Gunakan AllOrigins Proxy
         const targetUrl = `https://www.tikwm.com/api/?url=${encodeURIComponent(url)}`;
-        const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(targetUrl)}`;
+        const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(targetUrl)}&timestamp=${Date.now()}`;
         
         const res = await fetch(proxyUrl);
         if (!res.ok) throw new Error('Proxy server error');
         
         const proxyData = await res.json();
-        const data = JSON.parse(proxyData.contents); // AllOrigins membungkus JSON di field 'contents'
+        const data = typeof proxyData.contents === 'string' ? JSON.parse(proxyData.contents) : proxyData.contents;
 
         if (data && data.code === 0 && data.data) {
           const d = data.data;
+          
+          // Helper untuk memastikan URL selalu HTTPS (mencegah error Mixed Content di HP)
+          const makeHttps = u => u ? u.replace(/^http:\/\//i, 'https://') : '';
+
           resultData = {
             title: d.title || 'TikTok Video',
             author: d.author?.nickname || 'TikTok User',
-            thumbnail: d.cover,
+            thumbnail: makeHttps(d.cover),
             links: [
-              { label: 'Download Video (No WM)', url: d.play, filename: `tiktok-${Date.now()}.mp4` },
-              { label: 'Download Audio (MP3)', url: d.music, filename: `tiktok-audio-${Date.now()}.mp3` }
+              { label: 'Download Video (No WM)', url: makeHttps(d.play), filename: `tiktok-${Date.now()}.mp4` },
+              { label: 'Download Audio (MP3)', url: makeHttps(d.music), filename: `tiktok-audio-${Date.now()}.mp3` }
             ].filter(l => l.url)
           };
         } else {
-          throw new Error('Gagal memproses data TikTok');
+          throw new Error('Gagal memproses video TikTok. Pastikan akun tidak diprivate.');
         }
       } catch (errPrimary) {
-        // 🚀 OPSI 2: Fallback ke API Tiklydown via AllOrigins
-        const targetUrl2 = `https://api.tiklydown.eu.org/api/download?url=${encodeURIComponent(url)}`;
-        const proxyUrl2 = `https://api.allorigins.win/get?url=${encodeURIComponent(targetUrl2)}`;
-        
-        const res2 = await fetch(proxyUrl2);
-        const proxyData2 = await res2.json();
-        const data2 = JSON.parse(proxyData2.contents);
-
-        if (data2 && data2.status !== false) {
-          resultData = {
-            title: data2.title || 'TikTok Video',
-            author: data2.author?.name || 'TikTok User',
-            thumbnail: data2.cover || data2.dynamic_cover,
-            links: [
-              { label: 'Download Video (No WM)', url: data2.video?.noWatermark || data2.video?.watermark, filename: `tiktok-${Date.now()}.mp4` },
-              { label: 'Download Audio (MP3)', url: data2.music?.play_url, filename: `tiktok-audio-${Date.now()}.mp3` }
-            ].filter(l => l.url)
-          };
-        } else {
-          throw new Error('Semua API Downloader sedang tidak menanggapi.');
-        }
+        throw new Error(errPrimary.message || 'Gagal mengambil data video');
       }
     } else {
       throw new Error(`Fitur downloader ${S.platform.toUpperCase()} memerlukan server backend aktif.`);
@@ -100,6 +84,32 @@ async function startDl() {
     toast(err.message || 'Failed to fetch', 'error');
   } finally { 
     $('dlBtn').disabled = false; 
+  }
+}
+
+// ── PROXY DOWNLOAD (OPTIMIZED FOR HP) ────────────────────
+async function proxyDownload(fileUrl, filename, btn) {
+  const orig = btn.innerHTML;
+  btn.disabled = true; 
+  btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Memproses...';
+  
+  try {
+    // Di HP, cara paling aman dan stabil tanpa terhalang CORS blob adalah direct download / new tab
+    const a = document.createElement('a');
+    a.href = fileUrl;
+    a.target = '_blank';
+    a.rel = 'noopener noreferrer';
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    
+    toast('Membuat tautan unduhan...', 'success');
+  } catch (err) {
+    window.location.href = fileUrl;
+  } finally { 
+    btn.disabled = false; 
+    btn.innerHTML = orig; 
   }
 }
 
