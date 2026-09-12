@@ -1,5 +1,5 @@
 /* ═══════════════════════════════════════
-  XV10 Downloader — App Logic v5
+   XV10 Downloader — App Logic v5
    by Faiz
 ═══════════════════════════════════════ */
 
@@ -21,37 +21,50 @@ const S = {
   iqcEmoji: '😀',
 };
 
-// Wrapper fetch: kalau server backend mati / tidak bisa dihubungi (network
-// error), browser cuma bilang "Failed to fetch" tanpa detail. Kita ganti
-// jadi pesan yang jelas biar gampang di-diagnosis.
+// ── DOWNLOAD LOGIC ────────────────────
 async function startDl() {
-  const url = $('dlUrl').value.trim();
+  const url = $('dlUrl')?.value.trim();
   if (!url) { toast('Masukkan link video dulu!', 'error'); return; }
+  
   resetDlUI();
   $('dlLoading').style.display = 'block';
   $('dlBtn').disabled = true;
 
   try {
-    // Memanggil Public API Tiklydown langsung dari browser
-    const res = await fetch(`https://api.tiklydown.eu.org/api/download?url=${encodeURIComponent(url)}`);
-    
-    if (!res.ok) throw new Error(`HTTP Error status: ${res.status}`);
-    const data = await res.json();
+    // Validasi sederhana platform
+    if (S.platform === 'tiktok' && !url.includes('tiktok.com')) {
+      throw new Error('Link yang dimasukkan bukan link TikTok yang valid!');
+    }
 
-    if (!data || data.status === false) throw new Error('Gagal mengambil data video. Pastikan link TikTok valid.');
+    let resultData = null;
+
+    if (S.platform === 'tiktok') {
+      // Fetch dari Public API Tiklydown
+      const res = await fetch(`https://api.tiklydown.eu.org/api/download?url=${encodeURIComponent(url)}`);
+      if (!res.ok) throw new Error(`HTTP Error status: ${res.status}`);
+      const data = await res.json();
+
+      if (!data || data.status === false) {
+        throw new Error('Gagal mengambil data video. Pastikan link TikTok publik dan valid.');
+      }
+
+      resultData = {
+        title: data.title || 'TikTok Video',
+        author: data.author?.name || 'TikTok User',
+        thumbnail: data.cover || data.dynamic_cover,
+        links: [
+          { label: 'Download Video (No WM)', url: data.video?.noWatermark || data.video?.watermark, filename: `tiktok-${Date.now()}.mp4` },
+          { label: 'Download Audio (MP3)', url: data.music?.play_url, filename: `tiktok-audio-${Date.now()}.mp3` }
+        ].filter(l => l.url)
+      };
+    } else {
+      // Placeholder untuk Instagram / YouTube jika belum ada backend khusus
+      throw new Error(`Fitur downloader ${S.platform.toUpperCase()} memerlukan server backend aktif.`);
+    }
 
     $('dlLoading').style.display = 'none';
+    renderDlResult(resultData);
 
-    // Render hasil ke UI
-    renderDlResult({
-      title: data.title || 'TikTok Video',
-      author: data.author?.name || 'TikTok User',
-      thumbnail: data.cover || data.dynamic_cover,
-      links: [
-        { label: 'Download Video (No WM)', url: data.video?.noWatermark || data.video?.watermark },
-        { label: 'Download Audio (MP3)', url: data.music?.play_url }
-      ].filter(l => l.url)
-    });
   } catch (err) {
     $('dlLoading').style.display = 'none';
     $('dlError').style.display = 'block';
@@ -88,7 +101,7 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 /* ══════════════════════════════════════
-   NAV
+    NAV
 ══════════════════════════════════════ */
 function initNav() {
   $$('.sb-link, .bn').forEach(b => {
@@ -112,8 +125,9 @@ function closeSidebar() {
   document.getElementById('sidebar').classList.remove('open');
   $('mobOverlay').classList.remove('show');
 }
+
 /* ══════════════════════════════════════
-   MAKER
+    MAKER
 ══════════════════════════════════════ */
 function initMaker() {
   $$('.tab-btn').forEach(b => b.addEventListener('click', () => {
@@ -146,7 +160,6 @@ function initStikerMaker() {
   $('btnMakeStiker')?.addEventListener('click', renderStiker);
   $('btnDlStiker')?.addEventListener('click', () => dlCanvas('stikerCanvas', `stiker-${Date.now()}.png`, 'image/png'));
   $('btnDlStikerWp')?.addEventListener('click', () => dlCanvas('stikerCanvas', `stiker-${Date.now()}.webp`, 'image/webp'));
-  // Share langsung ke WA
   $('btnShareStiker')?.addEventListener('click', () => shareToWA('stikerCanvas', 'stiker.png'));
 }
 
@@ -222,9 +235,7 @@ function initBratMaker() {
   }
 }
 
-/* ────── IQC — Stiker "Long-Press Chat" ala WhatsApp ──────
-   Niru tampilan pas nge-long-press pesan WA: baris emoji reaksi ngambang,
-   bubble chat dengan teks custom, dan menu (Beri Bintang/Balas/Teruskan). */
+/* ────── IQC MAKER ────── */
 const IQC_EMOJIS = ['👍','❤️','😂','😮','😢','🙏','🔥','💯','🥹','😍','🤩','😎','🥳','😤','🤯','👑','✨','🎉','💙','💚','🖤','🌈','⚡','🫶','👏','💪','🎵','🚀','🌸','😭'];
 const IQC_DEFAULT_REACT = ['👍','❤️','😂','😮','🙏'];
 let S_iqcReact = [...IQC_DEFAULT_REACT];
@@ -319,25 +330,23 @@ function renderIqc() {
   const bubbleMaxW = W - 60;
 
   const canvas = $('iqcCanvas');
+  if (!canvas) return;
   const ctx = canvas.getContext('2d');
 
-  // Wrap bubble text
   ctx.font = '400 24px Inter,Arial,sans-serif';
   const mainLines = wrapText(ctx, mainText, bubbleMaxW - pad * 2);
   let bubbleW = 0;
   mainLines.forEach(l => { bubbleW = Math.max(bubbleW, ctx.measureText(l).width); });
-  bubbleW = Math.min(bubbleMaxW, Math.max(160, bubbleW + pad * 2 + 46)); // +46 room for time/check
+  bubbleW = Math.min(bubbleMaxW, Math.max(160, bubbleW + pad * 2 + 46));
 
   const lineH = 30;
   const bubbleH = 18 + mainLines.length * lineH + 26;
 
-  // Reaction pill sizing
   const reactSize = 42;
   const reactGap = 6;
   const reactPillW = reactions.length * (reactSize + reactGap) + reactGap;
   const reactPillH = 58;
 
-  // Menu sizing
   const menuItems = [
     { label: 'Beri Bintang', icon: '★' },
     { label: 'Balas', icon: '↩' },
@@ -353,7 +362,6 @@ function renderIqc() {
   canvas.width = canvasW; canvas.height = canvasH;
   ctx.clearRect(0, 0, canvasW, canvasH);
 
-  // ── Blurred dark chat backdrop (mimics blurred WA background) ──
   const bgGrad = ctx.createLinearGradient(0, 0, 0, canvasH);
   bgGrad.addColorStop(0, '#12211f');
   bgGrad.addColorStop(1, '#0b1512');
@@ -369,7 +377,6 @@ function renderIqc() {
   ctx.beginPath(); ctx.ellipse(canvasW * .15, canvasH * .7, 100, 70, 0, 0, Math.PI * 2); ctx.fill();
   ctx.restore();
 
-  // ── Reaction pill ──
   const pillX = (canvasW - reactPillW) / 2, pillY = topPad;
   ctx.save();
   ctx.shadowColor = 'rgba(0,0,0,.4)'; ctx.shadowBlur = 12; ctx.shadowOffsetY = 3;
@@ -383,7 +390,6 @@ function renderIqc() {
     ctx.fillText(em, cx, pillY + reactPillH / 2 + 1);
   });
 
-  // ── Bubble ──
   const bubbleX = canvasW - sidePad - bubbleW;
   const bubbleY = pillY + reactPillH + gap1;
   ctx.save();
@@ -408,7 +414,6 @@ function renderIqc() {
     drawCheckmarks(ctx, bubbleX + bubbleW - 20 - tw, bubbleY + bubbleH - 19, isRead);
   }
 
-  // ── Context menu (Beri Bintang / Balas / Teruskan) ──
   if (showMenu) {
     const menuX = canvasW - sidePad - menuW;
     const menuY = bubbleY + bubbleH + gap2;
@@ -441,8 +446,8 @@ function renderIqc() {
     });
   }
 
-  $('iqcPh').classList.add('hidden');
-  $('iqcActions').style.display = 'flex';
+  $('iqcPh')?.classList.add('hidden');
+  $('iqcActions') && ($('iqcActions').style.display = 'flex');
 }
 
 /* ────── Share ke WA langsung ────── */
@@ -453,26 +458,23 @@ async function shareToWA(canvasId, filename) {
   canvas.toBlob(async blob => {
     const file = new File([blob], filename, { type: 'image/png' });
 
-    // 1. Coba Web Share API (mobile: langsung buka WA/sosmed)
     if (navigator.share && navigator.canShare?.({ files: [file] })) {
       try {
         await navigator.share({ files: [file], title: 'XV10 Downloader', text: '' });
         return;
       } catch (e) {
-        if (e.name === 'AbortError') return; // user cancel
+        if (e.name === 'AbortError') return;
       }
     }
 
-    // 2. Coba clipboard (desktop)
     if (navigator.clipboard?.write) {
       try {
         await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
-        toast('Gambar di-copy ke clipboard! Buka WA → paste dengan tahan dan Tempel', 'success');
+        toast('Gambar di-copy ke clipboard! Buka WA → Tempel', 'success');
         return;
       } catch {}
     }
 
-    // 3. Fallback: download biasa
     dlCanvas(canvasId, filename, 'image/png');
     toast('Tersimpan! Kirim file tersebut ke WA', 'info');
   }, 'image/png', 0.95);
@@ -491,7 +493,7 @@ function dlCanvas(canvasId, filename, mime = 'image/png') {
 }
 
 /* ══════════════════════════════════════
-    DOWNLOADER
+    DOWNLOADER UI LOGIC
 ══════════════════════════════════════ */
 function initDownloader() {
   $$('.plat-tab').forEach(b => b.addEventListener('click', () => {
@@ -523,10 +525,11 @@ const DL_META = {
 function updateDlUI(plat) {
   const m = DL_META[plat];
   if (!m) return;
-  const icon = $('dlIcon'); icon.className = `dl-icon ${m.cls}`; icon.innerHTML = m.icon;
-  $('dlTitle').textContent = m.title; $('dlSub').textContent = m.sub;
-  $('dlUrl').placeholder = m.ph;
-  $('mp3Tab').style.display = m.mp3 ? 'flex' : 'none';
+  const icon = $('dlIcon'); if (icon) { icon.className = `dl-icon ${m.cls}`; icon.innerHTML = m.icon; }
+  if ($('dlTitle')) $('dlTitle').textContent = m.title; 
+  if ($('dlSub')) $('dlSub').textContent = m.sub;
+  if ($('dlUrl')) $('dlUrl').placeholder = m.ph;
+  if ($('mp3Tab')) $('mp3Tab').style.display = m.mp3 ? 'flex' : 'none';
   if (!m.mp3 && S.format === 'mp3') {
     $$('.fmt-tab').forEach(x => x.classList.remove('active'));
     document.querySelector('.fmt-tab[data-fmt="mp4"]')?.classList.add('active'); 
@@ -536,40 +539,41 @@ function updateDlUI(plat) {
 }
 
 function resetDlUI() {
-  $('dlLoading').style.display = 'none';
-  $('dlResult').style.display = 'none';
-  $('dlError').style.display = 'none';
+  if ($('dlLoading')) $('dlLoading').style.display = 'none';
+  if ($('dlResult')) $('dlResult').style.display = 'none';
+  if ($('dlError')) $('dlError').style.display = 'none';
 }
 window.resetDl = resetDlUI;
 
-// FUNGSI startDl() DI SINI SUDAH DIHAPUS 
-// KARENA SUDAH DIDEKLARASIKAN DI BAGIAN ATAS MENGGUNAKAN PUBLIC API TIKLYDOWN.
-
 function renderDlResult(data) {
-  $('dlThumb').src = data.thumbnail || 'https://placehold.co/130x90/0c0e1c/7c6fff?text=Video';
-  $('dlResTitle').textContent = data.title || 'Video';
+  if ($('dlThumb')) $('dlThumb').src = data.thumbnail || 'https://placehold.co/130x90/0c0e1c/7c6fff?text=Video';
+  if ($('dlResTitle')) $('dlResTitle').textContent = data.title || 'Video';
   let meta = data.platform || S.platform;
   if (data.author) meta += ' · ' + data.author;
   if (data.duration) meta += ' · ' + data.duration;
-  $('dlResMeta').textContent = meta;
+  if ($('dlResMeta')) $('dlResMeta').textContent = meta;
   
-  const btns = $('dlrBtns'); btns.innerHTML = '';
-  if (data.fallback && data.message) {
-    const n = document.createElement('div'); n.className = 'fallback-note';
-    n.innerHTML = `<i class="fa-solid fa-triangle-exclamation"></i> ${data.message}`; 
-    btns.appendChild(n);
-  }
-  (data.links || []).forEach(lnk => {
-    const isFb = lnk.fallback || lnk.label.startsWith('🌐');
-    const btn = document.createElement('button');
-    btn.className = 'dlr-btn' + (isFb ? ' fb' : '');
-    btn.innerHTML = `<i class="fa-solid ${isFb ? 'fa-arrow-up-right-from-square' : 'fa-download'}"></i> ${lnk.label}`;
-    btn.addEventListener('click', () => { 
-      isFb ? window.open(lnk.url, '_blank') : proxyDownload(lnk.url, lnk.filename || 'video.mp4', btn); 
+  const btns = $('dlrBtns'); 
+  if (btns) {
+    btns.innerHTML = '';
+    if (data.fallback && data.message) {
+      const n = document.createElement('div'); n.className = 'fallback-note';
+      n.innerHTML = `<i class="fa-solid fa-triangle-exclamation"></i> ${data.message}`; 
+      btns.appendChild(n);
+    }
+    (data.links || []).forEach(lnk => {
+      const isFb = lnk.fallback || lnk.label.startsWith('🌐');
+      const btn = document.createElement('button');
+      btn.className = 'dlr-btn' + (isFb ? ' fb' : '');
+      btn.innerHTML = `<i class="fa-solid ${isFb ? 'fa-arrow-up-right-from-square' : 'fa-download'}"></i> ${lnk.label}`;
+      btn.addEventListener('click', () => { 
+        isFb ? window.open(lnk.url, '_blank') : proxyDownload(lnk.url, lnk.filename || 'video.mp4', btn); 
+      });
+      btns.appendChild(btn);
     });
-    btns.appendChild(btn);
-  });
-  $('dlResult').style.display = 'block';
+  }
+  
+  if ($('dlResult')) $('dlResult').style.display = 'block';
   toast(data.fallback ? 'Klik tombol untuk download 🔗' : 'Siap didownload! 🎉', data.fallback ? 'info' : 'success');
 }
 
@@ -577,17 +581,24 @@ async function proxyDownload(fileUrl, filename, btn) {
   const orig = btn.innerHTML;
   btn.disabled = true; 
   btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Mengunduh...';
+  
   try {
+    // Mencoba fetch blob (berhasil jika CDN mendukung CORS)
     const res = await fetch(fileUrl);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const blob = await res.blob();
     const bUrl = URL.createObjectURL(blob);
-    const a = document.createElement('a'); a.href = bUrl; a.download = filename;
-    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    const a = document.createElement('a'); 
+    a.href = bUrl; 
+    a.download = filename;
+    document.body.appendChild(a); 
+    a.click(); 
+    document.body.removeChild(a);
     setTimeout(() => URL.revokeObjectURL(bUrl), 5000);
     toast('Download berhasil! ✅', 'success');
   } catch (err) {
-    toast('Gagal stream, mencoba buka langsung...', 'info');
+    // Fallback otomatis ke tab baru jika terhalang CORS
+    toast('Membuka file langsung di tab baru...', 'info');
     window.open(fileUrl, '_blank');
   } finally { 
     btn.disabled = false; 
@@ -596,19 +607,16 @@ async function proxyDownload(fileUrl, filename, btn) {
 }
 
 /* ══════════════════════════════════════
-   TOAST
+    TOAST & UTILS
 ══════════════════════════════════════ */
 function toast(msg, type = 'info') {
   const icons = { success:'fa-circle-check', error:'fa-circle-exclamation', info:'fa-circle-info' };
   const el = document.createElement('div'); el.className = `toast ${type}`;
   el.innerHTML = `<i class="fa-solid ${icons[type]||icons.info}"></i><span>${esc(msg)}</span>`;
-  $('toasts').appendChild(el);
+  $('toasts')?.appendChild(el);
   setTimeout(() => { el.style.transition='all .28s ease'; el.style.opacity='0'; el.style.transform='translateX(16px)'; setTimeout(()=>el.remove(),280); }, 3400);
 }
 
-/* ══════════════════════════════════════
-   UTILS
-══════════════════════════════════════ */
 function toBase64(file) { return new Promise((res,rej) => { const r=new FileReader(); r.onload=()=>res(r.result.split(',')[1]); r.onerror=rej; r.readAsDataURL(file); }); }
 function ficon(f) {
   if (f.type.startsWith('image/')) return { cls:'fi-img', icon:'fa-solid fa-image' };
