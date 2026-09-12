@@ -23,72 +23,69 @@ const S = {
 
 // ── DOWNLOAD LOGIC ────────────────────
 async function startDl() {
-  const inputUrl = $('dlUrl')?.value.trim();
-  if (!inputUrl) { toast('Masukkan link video dulu!', 'error'); return; }
+  const url = $('dlUrl')?.value.trim();
+  if (!url) { toast('Masukkan link video dulu!', 'error'); return; }
   
   resetDlUI();
   $('dlLoading').style.display = 'block';
   $('dlBtn').disabled = true;
 
   try {
-    if (S.platform === 'tiktok' && !inputUrl.includes('tiktok.com')) {
+    if (S.platform === 'tiktok' && !url.includes('tiktok.com')) {
       throw new Error('Link yang dimasukkan bukan link TikTok yang valid!');
     }
 
     let resultData = null;
 
     if (S.platform === 'tiktok') {
-      const targetApi = `https://www.tikwm.com/api/?url=${encodeURIComponent(inputUrl)}`;
-      let data = null;
-
-      // Percobaan 1: Fetch langsung ke TikWM (Beberapa jaringan HP mendukung direct fetch)
+      // 🚀 OPSI 1: API TIKWM via Proxy CORS yang Reliable (allorigins.win)
       try {
-        const resDirect = await fetch(targetApi);
-        if (resDirect.ok) {
-          const resJson = await resDirect.json();
-          if (resJson && resJson.code === 0) data = resJson.data;
+        const targetUrl = `https://www.tikwm.com/api/?url=${encodeURIComponent(url)}`;
+        const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(targetUrl)}`;
+        
+        const res = await fetch(proxyUrl);
+        if (!res.ok) throw new Error('Proxy server error');
+        
+        const proxyData = await res.json();
+        const data = JSON.parse(proxyData.contents); // AllOrigins membungkus JSON di field 'contents'
+
+        if (data && data.code === 0 && data.data) {
+          const d = data.data;
+          resultData = {
+            title: d.title || 'TikTok Video',
+            author: d.author?.nickname || 'TikTok User',
+            thumbnail: d.cover,
+            links: [
+              { label: 'Download Video (No WM)', url: d.play, filename: `tiktok-${Date.now()}.mp4` },
+              { label: 'Download Audio (MP3)', url: d.music, filename: `tiktok-audio-${Date.now()}.mp3` }
+            ].filter(l => l.url)
+          };
+        } else {
+          throw new Error('Gagal memproses data TikTok');
         }
-      } catch (e) { /* Lanjut ke fallback proxy */ }
+      } catch (errPrimary) {
+        // 🚀 OPSI 2: Fallback ke API Tiklydown via AllOrigins
+        const targetUrl2 = `https://api.tiklydown.eu.org/api/download?url=${encodeURIComponent(url)}`;
+        const proxyUrl2 = `https://api.allorigins.win/get?url=${encodeURIComponent(targetUrl2)}`;
+        
+        const res2 = await fetch(proxyUrl2);
+        const proxyData2 = await res2.json();
+        const data2 = JSON.parse(proxyData2.contents);
 
-      // Percobaan 2: Jika direct fetch gagal, pakai Proxy 1 (codetabs)
-      if (!data) {
-        try {
-          const resP1 = await fetch(`https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(targetApi)}`);
-          if (resP1.ok) {
-            const resJson = await resP1.json();
-            if (resJson && resJson.code === 0) data = resJson.data;
-          }
-        } catch (e) { /* Lanjut ke fallback berikutnya */ }
+        if (data2 && data2.status !== false) {
+          resultData = {
+            title: data2.title || 'TikTok Video',
+            author: data2.author?.name || 'TikTok User',
+            thumbnail: data2.cover || data2.dynamic_cover,
+            links: [
+              { label: 'Download Video (No WM)', url: data2.video?.noWatermark || data2.video?.watermark, filename: `tiktok-${Date.now()}.mp4` },
+              { label: 'Download Audio (MP3)', url: data2.music?.play_url, filename: `tiktok-audio-${Date.now()}.mp3` }
+            ].filter(l => l.url)
+          };
+        } else {
+          throw new Error('Semua API Downloader sedang tidak menanggapi.');
+        }
       }
-
-      // Percobaan 3: Jika Proxy 1 gagal, pakai Proxy 2 (allorigins)
-      if (!data) {
-        try {
-          const resP2 = await fetch(`https://api.allorigins.win/get?url=${encodeURIComponent(targetApi)}`);
-          if (resP2.ok) {
-            const proxyData = await resP2.json();
-            const parsed = typeof proxyData.contents === 'string' ? JSON.parse(proxyData.contents) : proxyData.contents;
-            if (parsed && parsed.code === 0) data = parsed.data;
-          }
-        } catch (e) { /* Lanjut ke error handling */ }
-      }
-
-      // Jika data berhasil didapatkan dari salah satu jalur
-      if (data) {
-        const makeHttps = u => u ? u.replace(/^http:\/\//i, 'https://') : '';
-        resultData = {
-          title: data.title || 'TikTok Video',
-          author: data.author?.nickname || 'TikTok User',
-          thumbnail: makeHttps(data.cover),
-          links: [
-            { label: 'Download Video (No WM)', url: makeHttps(data.play), filename: `tiktok-${Date.now()}.mp4` },
-            { label: 'Download Audio (MP3)', url: makeHttps(data.music), filename: `tiktok-audio-${Date.now()}.mp3` }
-          ].filter(l => l.url)
-        };
-      } else {
-        throw new Error('Koneksi server gagal. Coba pastikan link video benar atau ganti jaringan HP.');
-      }
-
     } else {
       throw new Error(`Fitur downloader ${S.platform.toUpperCase()} memerlukan server backend aktif.`);
     }
