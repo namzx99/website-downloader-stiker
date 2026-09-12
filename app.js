@@ -39,54 +39,76 @@ async function startDl() {
 
     if (S.platform === 'tiktok') {
       const makeHttps = u => u ? u.replace(/^http:\/\//i, 'https://') : '';
+      const encodedUrl = encodeURIComponent(url);
 
-      // ⚡ JALUR 1: Direct Request ke TikWM (Paling Cepat & Langsung)
-      try {
-        const res = await fetch(`https://www.tikwm.com/api/?url=${encodeURIComponent(url)}`);
-        if (res.ok) {
-          const json = await res.json();
-          if (json && json.code === 0 && json.data) {
-            const d = json.data;
-            resultData = {
-              title: d.title || 'TikTok Video',
-              author: d.author?.nickname || 'TikTok User',
-              thumbnail: makeHttps(d.cover),
+      // Daftar endpoint API & Proxy buat dirotasi otomatis biar ga kena rate-limit
+      const providers = [
+        // 1. Direct TikWM API (Paling Cepat)
+        async () => {
+          const res = await fetch(`https://www.tikwm.com/api/?url=${encodedUrl}`);
+          const j = await res.json();
+          if (j?.code === 0 && j?.data) {
+            return {
+              title: j.data.title || 'TikTok Video',
+              author: j.data.author?.nickname || 'TikTok User',
+              thumbnail: makeHttps(j.data.cover),
               links: [
-                { label: 'Download Video (No WM)', url: makeHttps(d.play), filename: `tiktok-${Date.now()}.mp4` },
-                { label: 'Download Audio (MP3)', url: makeHttps(d.music), filename: `tiktok-audio-${Date.now()}.mp3` }
+                { label: 'Download Video (No WM)', url: makeHttps(j.data.play), filename: `tiktok-${Date.now()}.mp4` },
+                { label: 'Download Audio (MP3)', url: makeHttps(j.data.music), filename: `tiktok-audio-${Date.now()}.mp3` }
               ].filter(l => l.url)
             };
           }
-        }
-      } catch (errDirect) {
-        console.warn('Direct fetch gagal, beralih ke jalur cadangan...');
-      }
-
-      // ⚡ JALUR 2: Fallback ke Tiklydown (Untuk shortlink HP seperti vt.tiktok.com)
-      if (!resultData) {
-        try {
-          const res2 = await fetch(`https://api.tiklydown.eu.org/api/download?url=${encodeURIComponent(url)}`);
-          if (res2.ok) {
-            const data2 = await res2.json();
-            if (data2 && data2.status !== false && data2.video) {
-              resultData = {
-                title: data2.title || 'TikTok Video',
-                author: data2.author?.name || 'TikTok User',
-                thumbnail: makeHttps(data2.cover || data2.dynamic_cover),
-                links: [
-                  { label: 'Download Video (No WM)', url: makeHttps(data2.video.noWatermark || data2.video.watermark), filename: `tiktok-${Date.now()}.mp4` },
-                  { label: 'Download Audio (MP3)', url: makeHttps(data2.music?.play_url), filename: `tiktok-audio-${Date.now()}.mp3` }
-                ].filter(l => l.url)
-              };
-            }
+          return null;
+        },
+        // 2. Tiklydown API (Cadangan Utama untuk Link HP / vt.tiktok.com)
+        async () => {
+          const res = await fetch(`https://api.tiklydown.eu.org/api/download?url=${encodedUrl}`);
+          const j = await res.json();
+          if (j?.status !== false && j?.video) {
+            return {
+              title: j.title || 'TikTok Video',
+              author: j.author?.name || 'TikTok User',
+              thumbnail: makeHttps(j.cover || j.dynamic_cover),
+              links: [
+                { label: 'Download Video (No WM)', url: makeHttps(j.video.noWatermark || j.video.watermark), filename: `tiktok-${Date.now()}.mp4` },
+                { label: 'Download Audio (MP3)', url: makeHttps(j.music?.play_url), filename: `tiktok-audio-${Date.now()}.mp3` }
+              ].filter(l => l.url)
+            };
           }
-        } catch (errFallback) {
-          throw new Error('Gagal mengambil data dari server downloader.');
+          return null;
+        },
+        // 3. TikWM via Codetabs Proxy (Tembus Rate Limit IP HP)
+        async () => {
+          const target = `https://www.tikwm.com/api/?url=${encodedUrl}`;
+          const res = await fetch(`https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(target)}`);
+          const j = await res.json();
+          if (j?.code === 0 && j?.data) {
+            return {
+              title: j.data.title || 'TikTok Video',
+              author: j.data.author?.nickname || 'TikTok User',
+              thumbnail: makeHttps(j.data.cover),
+              links: [
+                { label: 'Download Video (No WM)', url: makeHttps(j.data.play), filename: `tiktok-${Date.now()}.mp4` },
+                { label: 'Download Audio (MP3)', url: makeHttps(j.data.music), filename: `tiktok-audio-${Date.now()}.mp3` }
+              ].filter(l => l.url)
+            };
+          }
+          return null;
+        }
+      ];
+
+      // Eksekusi provider satu per satu sampai nemu yang berhasil (Rotasi otomatis)
+      for (const getApiData of providers) {
+        try {
+          resultData = await getApiData();
+          if (resultData) break; // Kalo sukses, stop loop & tampilkan hasil
+        } catch (e) {
+          // Lanjut ke provider berikutnya tanpa nunggu lama
         }
       }
 
       if (!resultData) {
-        throw new Error('Gagal memproses video. Pastikan link benar dan akun tidak diprivate.');
+        throw new Error('Semua server downloader sedang padat. Coba beberapa detik lagi.');
       }
 
     } else {
