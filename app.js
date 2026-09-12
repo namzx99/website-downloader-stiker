@@ -491,7 +491,7 @@ function dlCanvas(canvasId, filename, mime = 'image/png') {
 }
 
 /* ══════════════════════════════════════
-   DOWNLOADER
+    DOWNLOADER
 ══════════════════════════════════════ */
 function initDownloader() {
   $$('.plat-tab').forEach(b => b.addEventListener('click', () => {
@@ -503,8 +503,13 @@ function initDownloader() {
     S.format = b.dataset.fmt;
   }));
   $('dlPaste')?.addEventListener('click', async () => {
-    try { const t = await navigator.clipboard.readText(); $('dlUrl').value = t; toast('Link di-paste!', 'success'); }
-    catch { toast('Izin clipboard ditolak', 'error'); }
+    try { 
+      const t = await navigator.clipboard.readText(); 
+      $('dlUrl').value = t; 
+      toast('Link di-paste!', 'success'); 
+    } catch { 
+      toast('Izin clipboard ditolak', 'error'); 
+    }
   });
   $('dlBtn')?.addEventListener('click', startDl);
 }
@@ -517,16 +522,19 @@ const DL_META = {
 
 function updateDlUI(plat) {
   const m = DL_META[plat];
+  if (!m) return;
   const icon = $('dlIcon'); icon.className = `dl-icon ${m.cls}`; icon.innerHTML = m.icon;
   $('dlTitle').textContent = m.title; $('dlSub').textContent = m.sub;
   $('dlUrl').placeholder = m.ph;
   $('mp3Tab').style.display = m.mp3 ? 'flex' : 'none';
   if (!m.mp3 && S.format === 'mp3') {
     $$('.fmt-tab').forEach(x => x.classList.remove('active'));
-    document.querySelector('.fmt-tab[data-fmt="mp4"]').classList.add('active'); S.format = 'mp4';
+    document.querySelector('.fmt-tab[data-fmt="mp4"]')?.classList.add('active'); 
+    S.format = 'mp4';
   }
   resetDlUI();
 }
+
 function resetDlUI() {
   $('dlLoading').style.display = 'none';
   $('dlResult').style.display = 'none';
@@ -534,29 +542,8 @@ function resetDlUI() {
 }
 window.resetDl = resetDlUI;
 
-async function startDl() {
-  const url = $('dlUrl').value.trim();
-  if (!url) { toast('Masukkan link video dulu!', 'error'); return; }
-  resetDlUI();
-  $('dlLoading').style.display = 'block';
-  $('dlBtn').disabled = true;
-  try {
-    const res = await apiFetch('/api/download', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ url, platform: S.platform, format: S.format }),
-    });
-    const data = await res.json();
-    if (!res.ok || data.error) throw new Error(data.error || 'Server error');
-    $('dlLoading').style.display = 'none';
-    renderDlResult(data);
-  } catch (err) {
-    $('dlLoading').style.display = 'none';
-    $('dlError').style.display = 'block';
-    $('dlErrMsg').textContent = err.message;
-    toast(err.message, 'error');
-  } finally { $('dlBtn').disabled = false; }
-}
+// FUNGSI startDl() DI SINI SUDAH DIHAPUS 
+// KARENA SUDAH DIDEKLARASIKAN DI BAGIAN ATAS MENGGUNAKAN PUBLIC API TIKLYDOWN.
 
 function renderDlResult(data) {
   $('dlThumb').src = data.thumbnail || 'https://placehold.co/130x90/0c0e1c/7c6fff?text=Video';
@@ -565,17 +552,21 @@ function renderDlResult(data) {
   if (data.author) meta += ' · ' + data.author;
   if (data.duration) meta += ' · ' + data.duration;
   $('dlResMeta').textContent = meta;
+  
   const btns = $('dlrBtns'); btns.innerHTML = '';
   if (data.fallback && data.message) {
     const n = document.createElement('div'); n.className = 'fallback-note';
-    n.innerHTML = `<i class="fa-solid fa-triangle-exclamation"></i> ${data.message}`; btns.appendChild(n);
+    n.innerHTML = `<i class="fa-solid fa-triangle-exclamation"></i> ${data.message}`; 
+    btns.appendChild(n);
   }
   (data.links || []).forEach(lnk => {
     const isFb = lnk.fallback || lnk.label.startsWith('🌐');
     const btn = document.createElement('button');
     btn.className = 'dlr-btn' + (isFb ? ' fb' : '');
     btn.innerHTML = `<i class="fa-solid ${isFb ? 'fa-arrow-up-right-from-square' : 'fa-download'}"></i> ${lnk.label}`;
-    btn.addEventListener('click', () => { isFb ? window.open(lnk.url, '_blank') : proxyDownload(lnk.url, lnk.filename || 'video.mp4', btn); });
+    btn.addEventListener('click', () => { 
+      isFb ? window.open(lnk.url, '_blank') : proxyDownload(lnk.url, lnk.filename || 'video.mp4', btn); 
+    });
     btns.appendChild(btn);
   });
   $('dlResult').style.display = 'block';
@@ -584,10 +575,10 @@ function renderDlResult(data) {
 
 async function proxyDownload(fileUrl, filename, btn) {
   const orig = btn.innerHTML;
-  btn.disabled = true; btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Mengunduh...';
+  btn.disabled = true; 
+  btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Mengunduh...';
   try {
-    const proxyUrl = `${BACKEND}/api/proxy-download?url=${encodeURIComponent(fileUrl)}&filename=${encodeURIComponent(filename)}`;
-    const res = await fetch(proxyUrl);
+    const res = await fetch(fileUrl);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const blob = await res.blob();
     const bUrl = URL.createObjectURL(blob);
@@ -598,7 +589,10 @@ async function proxyDownload(fileUrl, filename, btn) {
   } catch (err) {
     toast('Gagal stream, mencoba buka langsung...', 'info');
     window.open(fileUrl, '_blank');
-  } finally { btn.disabled = false; btn.innerHTML = orig; }
+  } finally { 
+    btn.disabled = false; 
+    btn.innerHTML = orig; 
+  }
 }
 
 /* ══════════════════════════════════════
