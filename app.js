@@ -31,7 +31,6 @@ async function startDl() {
   $('dlBtn').disabled = true;
 
   try {
-    // Validasi sederhana platform
     if (S.platform === 'tiktok' && !url.includes('tiktok.com')) {
       throw new Error('Link yang dimasukkan bukan link TikTok yang valid!');
     }
@@ -39,26 +38,47 @@ async function startDl() {
     let resultData = null;
 
     if (S.platform === 'tiktok') {
-      // Fetch dari Public API Tiklydown
-      const res = await fetch(`https://api.tiklydown.eu.org/api/download?url=${encodeURIComponent(url)}`);
-      if (!res.ok) throw new Error(`HTTP Error status: ${res.status}`);
-      const data = await res.json();
+      // PERBAIKAN: Gunakan Tiklydown via CorsProxy / API alternatif (TikWM)
+      try {
+        // Opsi 1: API TikWM (sangat stabil untuk client-side web)
+        const res = await fetch(`https://www.tikwm.com/api/?url=${encodeURIComponent(url)}`);
+        const data = await res.json();
 
-      if (!data || data.status === false) {
-        throw new Error('Gagal mengambil data video. Pastikan link TikTok publik dan valid.');
+        if (data && data.code === 0 && data.data) {
+          const d = data.data;
+          resultData = {
+            title: d.title || 'TikTok Video',
+            author: d.author?.nickname || 'TikTok User',
+            thumbnail: d.cover,
+            links: [
+              { label: 'Download Video (No WM)', url: d.play, filename: `tiktok-${Date.now()}.mp4` },
+              { label: 'Download Audio (MP3)', url: d.music, filename: `tiktok-audio-${Date.now()}.mp3` }
+            ].filter(l => l.url)
+          };
+        } else {
+          throw new Error('Gagal memproses dengan TikWM');
+        }
+      } catch (errPrimary) {
+        // Opsi 2: Fallback ke CorsProxy + Tiklydown
+        const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(`https://api.tiklydown.eu.org/api/download?url=${url}`)}`;
+        const res2 = await fetch(proxyUrl);
+        const data2 = await res2.json();
+
+        if (data2 && data2.status !== false) {
+          resultData = {
+            title: data2.title || 'TikTok Video',
+            author: data2.author?.name || 'TikTok User',
+            thumbnail: data2.cover || data2.dynamic_cover,
+            links: [
+              { label: 'Download Video (No WM)', url: data2.video?.noWatermark || data2.video?.watermark, filename: `tiktok-${Date.now()}.mp4` },
+              { label: 'Download Audio (MP3)', url: data2.music?.play_url, filename: `tiktok-audio-${Date.now()}.mp3` }
+            ].filter(l => l.url)
+          };
+        } else {
+          throw new Error('Gagal mengambil data dari semua server downloader.');
+        }
       }
-
-      resultData = {
-        title: data.title || 'TikTok Video',
-        author: data.author?.name || 'TikTok User',
-        thumbnail: data.cover || data.dynamic_cover,
-        links: [
-          { label: 'Download Video (No WM)', url: data.video?.noWatermark || data.video?.watermark, filename: `tiktok-${Date.now()}.mp4` },
-          { label: 'Download Audio (MP3)', url: data.music?.play_url, filename: `tiktok-audio-${Date.now()}.mp3` }
-        ].filter(l => l.url)
-      };
     } else {
-      // Placeholder untuk Instagram / YouTube jika belum ada backend khusus
       throw new Error(`Fitur downloader ${S.platform.toUpperCase()} memerlukan server backend aktif.`);
     }
 
@@ -68,8 +88,8 @@ async function startDl() {
   } catch (err) {
     $('dlLoading').style.display = 'none';
     $('dlError').style.display = 'block';
-    $('dlErrMsg').textContent = err.message;
-    toast(err.message, 'error');
+    $('dlErrMsg').textContent = err.message || 'Gagal mengambil data video';
+    toast(err.message || 'Failed to fetch', 'error');
   } finally { 
     $('dlBtn').disabled = false; 
   }
