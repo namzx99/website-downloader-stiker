@@ -136,7 +136,7 @@ async function dlInstagramPublicPage(url) {
   }, null, 15000);
   if (r.status !== 200) throw new Error(`instagram page HTTP ${r.status}`);
 
-  const html = r.body;
+  let html = r.body;
   const candidates = [];
   const patterns = [
     /"video_url"\s*:\s*"((?:\\.|[^"\\])+)"/g,
@@ -146,6 +146,22 @@ async function dlInstagramPublicPage(url) {
   for (const pattern of patterns) {
     let match;
     while ((match = pattern.exec(html)) !== null) candidates.push(decodeInstagramUrl(match[1]));
+  }
+  if (!candidates.length) {
+    const embed = await doReq({
+      hostname: 'www.instagram.com', path: `${pagePath}embed/captioned/`, method: 'GET',
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/124 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml',
+      },
+    }, null, 15000);
+    if (embed.status === 200) {
+      html = embed.body;
+      for (const pattern of patterns) {
+        let match;
+        while ((match = pattern.exec(html)) !== null) candidates.push(decodeInstagramUrl(match[1]));
+      }
+    }
   }
   const videoUrl = candidates.find(candidate => /^https?:\/\//.test(candidate) && /\.(mp4|m3u8)(?:[?&]|$)/i.test(candidate))
     || candidates.find(candidate => /^https?:\/\//.test(candidate));
