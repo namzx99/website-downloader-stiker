@@ -94,6 +94,7 @@ function getStrategies(url, plat, format) {
     { name: 'ytdlp',     fn: () => dlYtdlp(url, format) },
   ];
   if (plat === 'Instagram') return [
+    { name: 'instagram-public-page', fn: () => dlInstagramPublicPage(url) },
     { name: 'snapsave',  fn: () => dlSnapSave(url) },
     { name: 'saveinsta', fn: () => dlSaveInsta(url) },
     { name: 'ytdlp',     fn: () => dlYtdlp(url, format) },
@@ -119,6 +120,57 @@ function doReq(opts, body = null, ms = 20000) {
     if (body) req.write(body);
     req.end();
   });
+}
+
+// ── Instagram public Reel/page ───────────────────────────
+async function dlInstagramPublicPage(url) {
+  const parsed = new URL(url);
+  const pagePath = parsed.pathname.replace(/\/+$/, '') + '/';
+  const r = await doReq({
+    hostname: 'www.instagram.com', path: pagePath, method: 'GET',
+    headers: {
+      'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 Version/17.0 Mobile/15E148 Safari/604.1',
+      'Accept': 'text/html,application/xhtml+xml',
+      'Accept-Language': 'en-US,en;q=0.9',
+    },
+  }, null, 15000);
+  if (r.status !== 200) throw new Error(`instagram page HTTP ${r.status}`);
+
+  const html = r.body;
+  const candidates = [];
+  const patterns = [
+    /"video_url"\s*:\s*"((?:\\.|[^"\\])+)"/g,
+    /"video_versions"\s*:\s*\[\s*\{[^}]*?"url"\s*:\s*"((?:\\.|[^"\\])+)"/g,
+    /property="og:video"\s+content="([^"]+)"/gi,
+  ];
+  for (const pattern of patterns) {
+    let match;
+    while ((match = pattern.exec(html)) !== null) candidates.push(decodeInstagramUrl(match[1]));
+  }
+  const videoUrl = candidates.find(candidate => /^https?:\/\//.test(candidate) && /\.(mp4|m3u8)(?:[?&]|$)/i.test(candidate))
+    || candidates.find(candidate => /^https?:\/\//.test(candidate));
+  if (!videoUrl) throw new Error('Instagram public page has no video URL');
+
+  const titleMatch = html.match(/<meta[^>]+property="og:title"[^>]+content="([^"]*)"/i);
+  const imageMatch = html.match(/<meta[^>]+property="og:image"[^>]+content="([^"]*)"/i);
+  return {
+    title: titleMatch ? decodeHtml(titleMatch[1]) : 'Instagram Reel',
+    thumbnail: imageMatch ? decodeInstagramUrl(imageMatch[1]) : '',
+    platform: 'Instagram',
+    links: [{ label: '⬇️ Download Reel', url: videoUrl, filename: 'instagram_reel.mp4' }],
+  };
+}
+
+function decodeInstagramUrl(value) {
+  return value
+    .replace(/\\u0026/g, '&')
+    .replace(/\\u003D/g, '=')
+    .replace(/\\\//g, '/')
+    .replace(/&amp;/g, '&');
+}
+
+function decodeHtml(value) {
+  return value.replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&amp;/g, '&');
 }
 
 // ── TikWM ─────────────────────────────────────────────────
