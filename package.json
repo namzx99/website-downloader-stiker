@@ -13,7 +13,6 @@
   "dependencies": {
     "cors": "^2.8.6",
     "express": "^5.2.1",
-    "multer": "^2.3.0",
-    "youtubei.js": "^18.0.0"
+    "multer": "^2.3.0"
   }
 }
