@@ -1,20 +1,13 @@
 import express from 'express';
 import cors from 'cors';
 import fetch from 'node-fetch';
-import path from 'path';
-import { fileURLToPath } from 'url';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
 app.use(cors());
 app.use(express.json());
-app.use(express.static(path.join(__dirname, 'public')));
 
-// List Server Cobalt (Utama & Cadangan)
 const COBALT_INSTANCES = [
   'https://cobalt-api.kwiatekm.tokyo',
   'https://api.cobalt.tools',
@@ -23,7 +16,6 @@ const COBALT_INSTANCES = [
 
 async function fetchFromCobalt(url, isAudioOnly = false) {
   let lastError = null;
-
   for (const instance of COBALT_INSTANCES) {
     try {
       const response = await fetch(instance, {
@@ -43,7 +35,7 @@ async function fetchFromCobalt(url, isAudioOnly = false) {
 
       if (response.ok) {
         const data = await response.json();
-        if (data.status === 'tunnel' || data.status === 'redirect' || data.status === 'picker') {
+        if (['tunnel', 'redirect', 'picker'].includes(data.status)) {
           return { data, instance };
         }
       }
@@ -54,7 +46,6 @@ async function fetchFromCobalt(url, isAudioOnly = false) {
   throw lastError || new Error('Semua server pengunduh sedang sibuk.');
 }
 
-// Endpoint Download Utama
 app.post('/api/download', async (req, res) => {
   try {
     const { url, platform, format } = req.body;
@@ -64,8 +55,8 @@ app.post('/api/download', async (req, res) => {
 
     try {
       const { data } = await fetchFromCobalt(url, isAudio);
-      
       let links = [];
+
       if (data.status === 'redirect' || data.status === 'tunnel') {
         links.push({
           url: data.url,
@@ -76,7 +67,7 @@ app.post('/api/download', async (req, res) => {
         data.picker.forEach((item, index) => {
           links.push({
             url: item.url,
-            label: `Download Slide/Media #${index + 1}`,
+            label: `Download Media #${index + 1}`,
             filename: `xv10-${platform}-${index + 1}-${Date.now()}.${item.type === 'photo' ? 'jpg' : 'mp4'}`
           });
         });
@@ -91,17 +82,16 @@ app.post('/api/download', async (req, res) => {
       });
 
     } catch (cobaltErr) {
-      // Fallback jika API Cobalt terblokir oleh Instagram/Vercel
       return res.json({
         success: true,
         fallback: true,
         platform: platform || 'media',
         title: `Download ${platform ? platform.toUpperCase() : 'Media'}`,
-        message: 'Server otomatis sedang padat. Klik tombol di bawah untuk lanjut download langsung.',
+        message: 'Server otomatis sedang penuh. Klik tombol di bawah untuk langsung ambil videonya.',
         links: [
           {
             url: `https://cobalt.tools/?url=${encodeURIComponent(url)}`,
-            label: '🌐 Buka Link Download Alternatif',
+            label: '🌐 Buka Link Alternatif',
             fallback: true
           }
         ]
@@ -112,25 +102,20 @@ app.post('/api/download', async (req, res) => {
   }
 });
 
-// Endpoint Proxy untuk menghindari CORS saat klik tombol download
 app.get('/api/proxy-download', async (req, res) => {
   const fileUrl = req.query.url;
   const filename = req.query.filename || 'download.mp4';
-
   if (!fileUrl) return res.status(400).send('URL diperlukan');
 
   try {
     const response = await fetch(fileUrl, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'
-      }
+      headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' }
     });
 
     if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
 
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
     res.setHeader('Content-Type', response.headers.get('content-type') || 'application/octet-stream');
-    
     response.body.pipe(res);
   } catch (err) {
     res.redirect(fileUrl);
@@ -140,5 +125,5 @@ app.get('/api/proxy-download', async (req, res) => {
 export default app;
 
 if (process.env.NODE_ENV !== 'production') {
-  app.listen(PORT, () => console.log(`Server berjalan di http://localhost:${PORT}`));
+  app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
 }
