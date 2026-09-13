@@ -21,27 +21,47 @@ const S = {
   iqcEmoji: '😀',
 };
 
-// ── DOWNLOAD LOGIC ────────────────────
-Async function startDl() {
-  const url = $('dlUrl')?.value.trim();
-  if (!url) { toast('Masukkan link video dulu!', 'error'); return; }
+// ── HELPER UTAMA ────────────────────────────────────────────────
+const $ = id => document.getElementById(id);
+
+function makeHttps(url) {
+  return url ? url.replace(/^http:\/\//i, 'https://') : '';
+}
+
+// ── LOGIKA UTAMA DOWNLOAD ──────────────────────────────────────
+async function startDl() {
+  const urlEl = $('dlUrl');
+  const url = urlEl?.value?.trim();
   
-  resetDlUI();
-  $('dlLoading').style.display = 'block';
-  $('dlBtn').disabled = true;
+  if (!url) { 
+    if (typeof toast === 'function') toast('Masukkan link video dulu!', 'error'); 
+    return; 
+  }
+
+  if (typeof resetDlUI === 'function') resetDlUI();
+  
+  const loadingEl = $('dlLoading');
+  const btnEl = $('dlBtn');
+  const errorEl = $('dlError');
+  const errorMsgEl = $('dlErrMsg');
+
+  if (loadingEl) loadingEl.style.display = 'block';
+  if (errorEl) errorEl.style.display = 'none';
+  if (btnEl) btnEl.disabled = true;
 
   try {
     let resultData = null;
-    const makeHttps = u => u ? u.replace(/^http:\/\//i, 'https://') : '';
     const encodedUrl = encodeURIComponent(url);
+    const platform = window.S?.platform || detectPlatform(url);
 
-    // ── 1. PLATFORM TIKTOK ─────────────────────────────────────────
-    if (S.platform === 'tiktok') {
+    // ── 1. PLATFORM TIKTOK ───────────────────────────────────────
+    if (platform === 'tiktok') {
       if (!url.includes('tiktok.com')) {
         throw new Error('Link yang dimasukkan bukan link TikTok yang valid!');
       }
 
       const providers = [
+        // Provider 1: TikWM Direct
         async () => {
           const res = await fetch(`https://www.tikwm.com/api/?url=${encodedUrl}`);
           const j = await res.json();
@@ -58,22 +78,7 @@ Async function startDl() {
           }
           return null;
         },
-        async () => {
-          const res = await fetch(`https://api.tiklydown.eu.org/api/download?url=${encodedUrl}`);
-          const j = await res.json();
-          if (j?.status !== false && j?.video) {
-            return {
-              title: j.title || 'TikTok Video',
-              author: j.author?.name || 'TikTok User',
-              thumbnail: makeHttps(j.cover || j.dynamic_cover),
-              links: [
-                { label: 'Download Video (No WM)', url: makeHttps(j.video.noWatermark || j.video.watermark), filename: `tiktok-${Date.now()}.mp4` },
-                { label: 'Download Audio (MP3)', url: makeHttps(j.music?.play_url), filename: `tiktok-audio-${Date.now()}.mp3` }
-              ].filter(l => l.url)
-            };
-          }
-          return null;
-        },
+        // Provider 2: TikWM via Proxy
         async () => {
           const target = `https://www.tikwm.com/api/?url=${encodedUrl}`;
           const res = await fetch(`https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(target)}`);
@@ -100,10 +105,10 @@ Async function startDl() {
         } catch (e) {}
       }
 
-    // ── 2. PLATFORM YOUTUBE & INSTAGRAM (COBALT API) ────────────────
-    } else if (S.platform === 'youtube' || S.platform === 'instagram') {
-      const isYt = S.platform === 'youtube';
-      const isIg = S.platform === 'instagram';
+    // ── 2. PLATFORM YOUTUBE & INSTAGRAM ──────────────────────────
+    } else if (platform === 'youtube' || platform === 'instagram') {
+      const isYt = platform === 'youtube';
+      const isIg = platform === 'instagram';
 
       if (isYt && !url.match(/(youtube\.com|youtu\.be)/i)) {
         throw new Error('Link yang dimasukkan bukan link YouTube yang valid!');
@@ -112,84 +117,80 @@ Async function startDl() {
         throw new Error('Link yang dimasukkan bukan link Instagram yang valid!');
       }
 
-      // Helper panggil Cobalt API
-      const fetchCobalt = async (mode = 'auto') => {
-        const res = await fetch('https://api.cobalt.tools/', {
-          method: 'POST',
-          headers: {
-            'Accept': 'application/json',
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            url: url,
-            downloadMode: mode, // 'auto' untuk MP4, 'audio' untuk MP3
-            audioFormat: 'mp3',
-            videoQuality: '1080'
-          })
-        });
-        return await res.json();
-      };
+      // Menggunakan fallback API publik yang stabil untuk YT/IG
+      const apiUrl = `https://api.cobalt.tools/`;
+      const res = await fetch(apiUrl, {
+        method: 'POST',
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          url: url,
+          videoQuality: '720',
+          downloadMode: 'auto'
+        })
+      });
 
-      // Tembak API paralel untuk MP4 dan MP3 sekaligus
-      const [vData, aData] = await Promise.allSettled([
-        fetchCobalt('auto'),
-        fetchCobalt('audio')
-      ]);
+      const j = await res.json();
+      const mediaUrl = j?.url || j?.picker?.[0]?.url;
 
-      const videoRes = vData.status === 'fulfilled' ? vData.value : null;
-      const audioRes = aData.status === 'fulfilled' ? aData.value : null;
-
-      const videoUrl = videoRes?.url;
-      const audioUrl = audioRes?.url;
-
-      if (!videoUrl && !audioUrl) {
-        throw new Error('Gagal memproses media dari URL tersebut. Pastikan akun tidak di-private.');
+      if (!mediaUrl) {
+        throw new Error('Gagal memproses media dari URL tersebut. Pastikan tautan publik.');
       }
 
       const prefix = isYt ? 'youtube' : 'instagram';
-      const titleName = isYt ? 'YouTube Media' : 'Instagram Media';
+      const titleName = isYt ? 'YouTube Video' : 'Instagram Media';
 
       resultData = {
         title: titleName,
-        author: S.platform.toUpperCase(),
-        thumbnail: '', // Cobalt tidak selalu mereturn thumbnail terpisah
+        author: platform.toUpperCase(),
+        thumbnail: '',
         links: [
-          videoUrl ? { label: 'Download Video (MP4)', url: videoUrl, filename: `${prefix}-${Date.now()}.mp4` } : null,
-          audioUrl ? { label: 'Download Audio (MP3)', url: audioUrl, filename: `${prefix}-audio-${Date.now()}.mp3` } : null
-        ].filter(Boolean)
+          { label: 'Download Video (MP4)', url: mediaUrl, filename: `${prefix}-${Date.now()}.mp4` }
+        ]
       };
 
     } else {
-      throw new Error(`Platform ${S.platform.toUpperCase()} tidak didukung.`);
+      throw new Error('Platform tidak didukung. Masukkan link TikTok, YouTube, atau Instagram.');
     }
 
     if (!resultData) {
       throw new Error('Semua server downloader sedang padat. Coba beberapa detik lagi.');
     }
 
-    $('dlLoading').style.display = 'none';
-    renderDlResult(resultData);
+    if (loadingEl) loadingEl.style.display = 'none';
+    if (typeof renderDlResult === 'function') renderDlResult(resultData);
 
   } catch (err) {
-    $('dlLoading').style.display = 'none';
-    $('dlError').style.display = 'block';
-    $('dlErrMsg').textContent = err.message || 'Gagal mengambil data video';
-    toast(err.message || 'Failed to fetch', 'error');
-  } finally { 
-    $('dlBtn').disabled = false; 
+    if (loadingEl) loadingEl.style.display = 'none';
+    if (errorEl) errorEl.style.display = 'block';
+    if (errorMsgEl) errorMsgEl.textContent = err.message || 'Gagal mengambil data video';
+    if (typeof toast === 'function') toast(err.message || 'Gagal mengambil data', 'error');
+  } finally {
+    if (btnEl) btnEl.disabled = false;
   }
 }
 
-// ── PROXY DOWNLOAD (TERSIMPAN LANGSUNG KE DEVICE) ────────────
+// ── DETEKSI PLATFORM OTOMATIS ──────────────────────────────────
+function detectPlatform(url) {
+  if (url.includes('tiktok.com')) return 'tiktok';
+  if (url.includes('instagram.com')) return 'instagram';
+  if (url.match(/(youtube\.com|youtu\.be)/i)) return 'youtube';
+  return '';
+}
+
+// ── PROXY DOWNLOAD FILE DIRECT KE HP/PC ─────────────────────────
 async function proxyDownload(fileUrl, filename, btn) {
-  const orig = btn.innerHTML;
+  if (!btn) return;
+  const origText = btn.innerHTML;
   btn.disabled = true; 
-  btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Memproses...';
-  
+  btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Mengunduh...';
+
   try {
-    // Ambil file sebagai Blob lalu buat Object URL untuk memicu unduhan langsung ke storage HP/PC
+    // 1. Coba fetch blob langsung
     const res = await fetch(fileUrl);
-    if (!res.ok) throw new Error('Download failed');
+    if (!res.ok) throw new Error('CORS or Network issue');
     const blob = await res.blob();
     
     const blobUrl = URL.createObjectURL(blob);
@@ -200,11 +201,10 @@ async function proxyDownload(fileUrl, filename, btn) {
     a.click();
     document.body.removeChild(a);
     
-    // Cleanup Memory
     setTimeout(() => URL.revokeObjectURL(blobUrl), 10000);
-    toast('Unduhan dimulai!', 'success');
+    if (typeof toast === 'function') toast('Unduhan dimulai!', 'success');
   } catch (err) {
-    // Fallback jika fetch terhalang CORS di HP
+    // 2. Fallback: Buka link langsung jika fetch blob diblokir browser/CORS
     const a = document.createElement('a');
     a.href = fileUrl;
     a.target = '_blank';
@@ -213,36 +213,10 @@ async function proxyDownload(fileUrl, filename, btn) {
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
-    toast('Membuka tautan unduhan...', 'success');
+    if (typeof toast === 'function') toast('Membuka tautan unduhan...', 'success');
   } finally { 
     btn.disabled = false; 
-    btn.innerHTML = orig; 
-  }
-}
-
-// ── PROXY DOWNLOAD (OPTIMIZED FOR HP) ────────────────────
-async function proxyDownload(fileUrl, filename, btn) {
-  const orig = btn.innerHTML;
-  btn.disabled = true; 
-  btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Memproses...';
-  
-  try {
-    // Di HP, cara paling aman dan stabil tanpa terhalang CORS blob adalah direct download / new tab
-    const a = document.createElement('a');
-    a.href = fileUrl;
-    a.target = '_blank';
-    a.rel = 'noopener noreferrer';
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    
-    toast('Membuat tautan unduhan...', 'success');
-  } catch (err) {
-    window.location.href = fileUrl;
-  } finally { 
-    btn.disabled = false; 
-    btn.innerHTML = orig; 
+    btn.innerHTML = origText; 
   }
 }
 
