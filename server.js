@@ -1,28 +1,22 @@
 import express from 'express';
 import cors from 'cors';
 import fetch from 'node-fetch';
-import path from 'path';
-import { fileURLToPath } from 'url';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
 
 const app = express();
 
 app.use(cors());
 app.use(express.json());
 
-// Melayani file frontend (index.html, css, js) langsung dari root
-app.use(express.static(__dirname));
-
+// Daftar publik instansi Cobalt yang lebih stabil
 const COBALT_INSTANCES = [
-  'https://cobalt-api.kwiatekm.tokyo',
   'https://api.cobalt.tools',
-  'https://co.wuk.sh'
+  'https://cobalt-api.kwiatekm.tokyo',
+  'https://cobalt.twi.tf'
 ];
 
 async function fetchFromCobalt(url, isAudioOnly = false) {
   let lastError = null;
+  
   for (const instance of COBALT_INSTANCES) {
     try {
       const response = await fetch(instance, {
@@ -42,7 +36,7 @@ async function fetchFromCobalt(url, isAudioOnly = false) {
 
       if (response.ok) {
         const data = await response.json();
-        if (['tunnel', 'redirect', 'picker'].includes(data.status)) {
+        if (['tunnel', 'redirect', 'picker', 'stream'].includes(data.status)) {
           return { data, instance };
         }
       }
@@ -65,18 +59,18 @@ app.post('/api/download', async (req, res) => {
       const { data } = await fetchFromCobalt(url, isAudio);
       let links = [];
 
-      if (data.status === 'redirect' || data.status === 'tunnel') {
+      if (['redirect', 'tunnel', 'stream'].includes(data.status)) {
         links.push({
           url: data.url,
           label: isAudio ? 'Download MP3' : 'Download Video (HD)',
-          filename: `xv10-${platform}-${Date.now()}.${isAudio ? 'mp3' : 'mp4'}`
+          filename: `xv10-${platform || 'media'}-${Date.now()}.${isAudio ? 'mp3' : 'mp4'}`
         });
       } else if (data.status === 'picker') {
         data.picker.forEach((item, index) => {
           links.push({
             url: item.url,
             label: `Download Media #${index + 1}`,
-            filename: `xv10-${platform}-${index + 1}-${Date.now()}.${item.type === 'photo' ? 'jpg' : 'mp4'}`
+            filename: `xv10-${platform || 'media'}-${index + 1}-${Date.now()}.${item.type === 'photo' ? 'jpg' : 'mp4'}`
           });
         });
       }
@@ -125,15 +119,12 @@ app.get('/api/proxy-download', async (req, res) => {
 
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
     res.setHeader('Content-Type', response.headers.get('content-type') || 'application/octet-stream');
+    
+    // Node-fetch stream to Express response
     response.body.pipe(res);
   } catch (err) {
     res.redirect(fileUrl);
   }
-});
-
-// Route Fallback untuk melayani index.html pada root "/"
-app.get('*', (req, res) => {
-  res.sendFile(path.join(__dirname, 'index.html'));
 });
 
 export default app;
