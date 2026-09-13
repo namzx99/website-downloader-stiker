@@ -7,18 +7,20 @@ const PORT = process.env.PORT || 3000;
 
 app.use(cors());
 app.use(express.json());
+
+// Melayani file frontend statis (index.html, style.css, app.js)
 app.use(express.static(path.join(__dirname)));
 
-// Endpoint Downloader
-app.post('/api/download', async (req, res) => {
-  const { url, platform, format } = req.body;
+// Handler Utama API Downloader
+const handleDownload = async (req, res) => {
+  const { url, platform, format } = req.body || {};
 
   if (!url) {
     return res.status(400).json({ error: 'URL tidak boleh kosong!' });
   }
 
   try {
-    // 1. TikTok Downloader (Menggunakan API TikWM)
+    // 1. TikTok Downloader (via TikWM API)
     if (platform === 'tiktok' || url.includes('tiktok.com')) {
       const response = await fetch(`https://www.tikwm.com/api/?url=${encodeURIComponent(url)}`);
       const data = await response.json();
@@ -28,13 +30,13 @@ app.post('/api/download', async (req, res) => {
       }
 
       const videoData = data.data;
-      const downloadUrl = format === 'mp3' ? videoData.music : videoData.play;
+      const downloadUrl = format === 'mp3' ? videoData.music : (videoData.hdplay || videoData.play);
 
-      return res.json({
+      return res.status(200).json({
         platform: 'TikTok',
         title: videoData.title || 'TikTok Video',
         author: videoData.author?.nickname || 'Creator',
-        duration: `${videoData.duration || 0}s`,
+        duration: videoData.duration ? `${videoData.duration}s` : 'Unknown',
         thumbnail: videoData.cover,
         links: [
           {
@@ -46,40 +48,12 @@ app.post('/api/download', async (req, res) => {
       });
     }
 
-    // 2. Instagram Downloader (Menggunakan Cobalt API / Third-Party)
-    if (platform === 'instagram' || url.includes('instagram.com')) {
-      const response = await fetch('https://co.wuk.sh/api/json', {
-        method: 'POST',
-        headers: {
-          'Accept': 'application/json',
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ url })
-      });
-
-      const data = await response.json();
-      if (!data.url) {
-        throw new Error('Gagal memproses link Instagram. Pastikan akun tidak diprivat.');
-      }
-
-      return res.json({
-        platform: 'Instagram',
-        title: 'Instagram Media',
-        author: 'Instagram User',
-        thumbnail: 'https://placehold.co/130x90/e1306c/ffffff?text=Instagram',
-        links: [
-          {
-            label: 'Download Media (MP4)',
-            url: data.url,
-            filename: `instagram-${Date.now()}.mp4`
-          }
-        ]
-      });
-    }
-
-    // 3. YouTube Downloader (Menggunakan Cobalt API)
-    if (platform === 'youtube' || url.includes('youtube.com') || url.includes('youtu.be')) {
-      const response = await fetch('https://co.wuk.sh/api/json', {
+    // 2. Instagram & YouTube Downloader (via Cobalt API)
+    if (
+      platform === 'instagram' || url.includes('instagram.com') ||
+      platform === 'youtube' || url.includes('youtube.com') || url.includes('youtu.be')
+    ) {
+      const response = await fetch('https://api.cobalt.tools/api/json', {
         method: 'POST',
         headers: {
           'Accept': 'application/json',
@@ -87,25 +61,26 @@ app.post('/api/download', async (req, res) => {
         },
         body: JSON.stringify({
           url,
-          isAudioOnly: format === 'mp3'
+          downloadMode: format === 'mp3' ? 'audio' : 'auto'
         })
       });
 
       const data = await response.json();
-      if (!data.url) {
-        throw new Error('Gagal memproses video YouTube.');
+
+      if (data.status === 'error' || !data.url) {
+        throw new Error(data.text || 'Gagal memproses link media. Coba link lain.');
       }
 
-      return res.json({
-        platform: 'YouTube',
-        title: 'YouTube Media',
-        author: 'YouTube Channel',
-        thumbnail: 'https://placehold.co/130x90/ff0000/ffffff?text=YouTube',
+      return res.status(200).json({
+        platform: platform ? platform.toUpperCase() : 'Media',
+        title: 'Hasil Download',
+        author: 'User',
+        thumbnail: 'https://placehold.co/130x90/111827/ffffff?text=Media',
         links: [
           {
             label: format === 'mp3' ? 'Download Audio (MP3)' : 'Download Video (MP4)',
             url: data.url,
-            filename: `youtube-${Date.now()}.${format === 'mp3' ? 'mp3' : 'mp4'}`
+            filename: `download-${Date.now()}.${format === 'mp3' ? 'mp3' : 'mp4'}`
           }
         ]
       });
@@ -115,32 +90,21 @@ app.post('/api/download', async (req, res) => {
   } catch (err) {
     return res.status(500).json({ error: err.message || 'Terjadi kesalahan pada server.' });
   }
-});
+};
 
-// Endpoint Proxy Download (Mencegah CORS saat mengunduh blob file)
-app.get('/api/proxy-download', async (req, res) => {
-  const fileUrl = req.query.url;
-  const filename = req.query.filename || 'download.mp4';
+// Routing Express untuk Local
+app.post('/api/download', handleDownload);
 
-  if (!fileUrl) {
-    return res.status(400).send('URL missing');
+// Compatibility Export untuk Vercel Serverless Function
+module.exports = app;
+module.exports.default = (req, res) => {
+  if (req.method === 'POST') {
+    return handleDownload(req, res);
   }
+  return res.status(405).json({ error: 'Method Not Allowed' });
+};
 
-  try {
-    const response = await fetch(fileUrl);
-    if (!response.ok) throw new Error('Gagal mengambil file asal.');
-
-    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
-    res.setHeader('Content-Type', response.headers.get('content-type') || 'application/octet-stream');
-
-    const arrayBuffer = await response.arrayBuffer();
-    const buffer = Buffer.from(arrayBuffer);
-    res.send(buffer);
-  } catch (err) {
-    res.status(500).send(`Error proxy download: ${err.message}`);
-  }
-});
-
-app.listen(PORT, () => {
-  console.log(`Server jalan di http://localhost:${PORT}`);
-});
+// Jalankan Server jika di Local
+if (process.env.NODE_ENV !== 'production' && !process.env.VERCEL) {
+  app.listen(PORT, () => console.log(`Server aktif di http://localhost:${PORT}`));
+}
