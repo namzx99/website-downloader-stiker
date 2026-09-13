@@ -22,7 +22,7 @@ const S = {
 };
 
 // ── DOWNLOAD LOGIC ────────────────────
-async function startDl() {
+Async function startDl() {
   const url = $('dlUrl')?.value.trim();
   if (!url) { toast('Masukkan link video dulu!', 'error'); return; }
   
@@ -31,19 +31,17 @@ async function startDl() {
   $('dlBtn').disabled = true;
 
   try {
-    if (S.platform === 'tiktok' && !url.includes('tiktok.com')) {
-      throw new Error('Link yang dimasukkan bukan link TikTok yang valid!');
-    }
-
     let resultData = null;
+    const makeHttps = u => u ? u.replace(/^http:\/\//i, 'https://') : '';
+    const encodedUrl = encodeURIComponent(url);
 
+    // ── 1. PLATFORM TIKTOK ─────────────────────────────────────────
     if (S.platform === 'tiktok') {
-      const makeHttps = u => u ? u.replace(/^http:\/\//i, 'https://') : '';
-      const encodedUrl = encodeURIComponent(url);
+      if (!url.includes('tiktok.com')) {
+        throw new Error('Link yang dimasukkan bukan link TikTok yang valid!');
+      }
 
-      // Daftar endpoint API & Proxy buat dirotasi otomatis biar ga kena rate-limit
       const providers = [
-        // 1. Direct TikWM API (Paling Cepat)
         async () => {
           const res = await fetch(`https://www.tikwm.com/api/?url=${encodedUrl}`);
           const j = await res.json();
@@ -60,7 +58,6 @@ async function startDl() {
           }
           return null;
         },
-        // 2. Tiklydown API (Cadangan Utama untuk Link HP / vt.tiktok.com)
         async () => {
           const res = await fetch(`https://api.tiklydown.eu.org/api/download?url=${encodedUrl}`);
           const j = await res.json();
@@ -77,7 +74,6 @@ async function startDl() {
           }
           return null;
         },
-        // 3. TikWM via Codetabs Proxy (Tembus Rate Limit IP HP)
         async () => {
           const target = `https://www.tikwm.com/api/?url=${encodedUrl}`;
           const res = await fetch(`https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(target)}`);
@@ -97,22 +93,78 @@ async function startDl() {
         }
       ];
 
-      // Eksekusi provider satu per satu sampai nemu yang berhasil (Rotasi otomatis)
       for (const getApiData of providers) {
         try {
           resultData = await getApiData();
-          if (resultData) break; // Kalo sukses, stop loop & tampilkan hasil
-        } catch (e) {
-          // Lanjut ke provider berikutnya tanpa nunggu lama
-        }
+          if (resultData) break;
+        } catch (e) {}
       }
 
-      if (!resultData) {
-        throw new Error('Semua server downloader sedang padat. Coba beberapa detik lagi.');
+    // ── 2. PLATFORM YOUTUBE & INSTAGRAM (COBALT API) ────────────────
+    } else if (S.platform === 'youtube' || S.platform === 'instagram') {
+      const isYt = S.platform === 'youtube';
+      const isIg = S.platform === 'instagram';
+
+      if (isYt && !url.match(/(youtube\.com|youtu\.be)/i)) {
+        throw new Error('Link yang dimasukkan bukan link YouTube yang valid!');
       }
+      if (isIg && !url.includes('instagram.com')) {
+        throw new Error('Link yang dimasukkan bukan link Instagram yang valid!');
+      }
+
+      // Helper panggil Cobalt API
+      const fetchCobalt = async (mode = 'auto') => {
+        const res = await fetch('https://api.cobalt.tools/', {
+          method: 'POST',
+          headers: {
+            'Accept': 'application/json',
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            url: url,
+            downloadMode: mode, // 'auto' untuk MP4, 'audio' untuk MP3
+            audioFormat: 'mp3',
+            videoQuality: '1080'
+          })
+        });
+        return await res.json();
+      };
+
+      // Tembak API paralel untuk MP4 dan MP3 sekaligus
+      const [vData, aData] = await Promise.allSettled([
+        fetchCobalt('auto'),
+        fetchCobalt('audio')
+      ]);
+
+      const videoRes = vData.status === 'fulfilled' ? vData.value : null;
+      const audioRes = aData.status === 'fulfilled' ? aData.value : null;
+
+      const videoUrl = videoRes?.url;
+      const audioUrl = audioRes?.url;
+
+      if (!videoUrl && !audioUrl) {
+        throw new Error('Gagal memproses media dari URL tersebut. Pastikan akun tidak di-private.');
+      }
+
+      const prefix = isYt ? 'youtube' : 'instagram';
+      const titleName = isYt ? 'YouTube Media' : 'Instagram Media';
+
+      resultData = {
+        title: titleName,
+        author: S.platform.toUpperCase(),
+        thumbnail: '', // Cobalt tidak selalu mereturn thumbnail terpisah
+        links: [
+          videoUrl ? { label: 'Download Video (MP4)', url: videoUrl, filename: `${prefix}-${Date.now()}.mp4` } : null,
+          audioUrl ? { label: 'Download Audio (MP3)', url: audioUrl, filename: `${prefix}-audio-${Date.now()}.mp3` } : null
+        ].filter(Boolean)
+      };
 
     } else {
-      throw new Error(`Fitur downloader ${S.platform.toUpperCase()} memerlukan server backend aktif.`);
+      throw new Error(`Platform ${S.platform.toUpperCase()} tidak didukung.`);
+    }
+
+    if (!resultData) {
+      throw new Error('Semua server downloader sedang padat. Coba beberapa detik lagi.');
     }
 
     $('dlLoading').style.display = 'none';
@@ -125,6 +177,46 @@ async function startDl() {
     toast(err.message || 'Failed to fetch', 'error');
   } finally { 
     $('dlBtn').disabled = false; 
+  }
+}
+
+// ── PROXY DOWNLOAD (TERSIMPAN LANGSUNG KE DEVICE) ────────────
+async function proxyDownload(fileUrl, filename, btn) {
+  const orig = btn.innerHTML;
+  btn.disabled = true; 
+  btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Memproses...';
+  
+  try {
+    // Ambil file sebagai Blob lalu buat Object URL untuk memicu unduhan langsung ke storage HP/PC
+    const res = await fetch(fileUrl);
+    if (!res.ok) throw new Error('Download failed');
+    const blob = await res.blob();
+    
+    const blobUrl = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = blobUrl;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    
+    // Cleanup Memory
+    setTimeout(() => URL.revokeObjectURL(blobUrl), 10000);
+    toast('Unduhan dimulai!', 'success');
+  } catch (err) {
+    // Fallback jika fetch terhalang CORS di HP
+    const a = document.createElement('a');
+    a.href = fileUrl;
+    a.target = '_blank';
+    a.rel = 'noopener noreferrer';
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    toast('Membuka tautan unduhan...', 'success');
+  } finally { 
+    btn.disabled = false; 
+    btn.innerHTML = orig; 
   }
 }
 
