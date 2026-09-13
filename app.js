@@ -1,14 +1,19 @@
 /* ═══════════════════════════════════════
-   XV10 Downloader — App Logic Fix
+  XV10 Downloader — Frontend Logic
 ═══════════════════════════════════════ */
 
-// BACKEND otomatis menggunakan window.location.origin
-const BACKEND = window.location.origin;
+const BACKEND = location.origin;
 
 const S = {
   platform: 'tiktok',
   format: 'mp4',
-  page: 'dl'
+  makerTab: 'stiker',
+  stkBg: 'transparent',
+  stkFw: '800',
+  stkFs: 'normal',
+  iqcFile: null,
+  iqcFilter: 'none',
+  iqcEmoji: '😀',
 };
 
 async function apiFetch(path, opts) {
@@ -16,21 +21,46 @@ async function apiFetch(path, opts) {
   try {
     res = await fetch(`${BACKEND}${path}`, opts);
   } catch (netErr) {
-    throw new Error(`Gagal terhubung ke server. Cek koneksi internet Anda.`);
+    throw new Error(`Tidak dapat terhubung ke server backend (${BACKEND}). Pastikan koneksi internet stabil.`);
   }
+
+  const contentType = res.headers.get('content-type') || '';
+  if (!contentType.includes('application/json')) {
+    const rawText = await res.text();
+    if (rawText.includes('<html>') || rawText.includes('<!DOCTYPE html>')) {
+      throw new Error(`API mengembalikan respons HTML (Status: ${res.status}). Rute API tidak ditemukan atau server mengalami kendala.`);
+    }
+    throw new Error(`Respons tidak valid dari server: ${rawText.slice(0, 100)}`);
+  }
+
   return res;
 }
 
 const $ = id => document.getElementById(id);
 const $$ = s => document.querySelectorAll(s);
 const esc = s => { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; };
+const now = () => new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
+
+function wrapText(ctx, text, maxW) {
+  const words = text.split(' ');
+  const lines = []; let cur = '';
+  for (const w of words) {
+    const t = cur ? cur + ' ' + w : w;
+    if (ctx.measureText(t).width > maxW && cur) { lines.push(cur); cur = w; }
+    else cur = t;
+  }
+  if (cur) lines.push(cur);
+  return lines;
+}
 
 document.addEventListener('DOMContentLoaded', () => {
   initNav();
+  initMaker();
   initDownloader();
   goTo('dl');
 });
 
+/* ── NAV ── */
 function initNav() {
   $$('.sb-link, .bn').forEach(b => {
     b.addEventListener('click', () => { const p = b.dataset.p; if (p) { goTo(p); closeSidebar(); } });
@@ -55,51 +85,357 @@ function closeSidebar() {
   $('mobOverlay')?.classList.remove('show');
 }
 
-/* ══════════════════════════════════════
-    DOWNLOADER LOGIC
-══════════════════════════════════════ */
+/* ── MAKER ── */
+function initMaker() {
+  $$('.tab-btn').forEach(b => b.addEventListener('click', () => {
+    $$('.tab-btn').forEach(x => x.classList.remove('active'));
+    $$('.tab-pane').forEach(x => x.classList.remove('active'));
+    b.classList.add('active'); S.makerTab = b.dataset.tab;
+    document.getElementById(`tab-${b.dataset.tab}`)?.classList.add('active');
+  }));
+  initStikerMaker();
+  initBratMaker();
+  initIqcMaker();
+}
+
+function initStikerMaker() {
+  $('stkSize')?.addEventListener('input', e => { if ($('stkSizeVal')) $('stkSizeVal').textContent = e.target.value; });
+  $$('.cp').forEach(cp => {
+    cp.addEventListener('click', () => { $$('.cp').forEach(x => x.classList.remove('active')); cp.classList.add('active'); $('stkColor').value = cp.dataset.c; });
+  });
+  $$('#bgGrid .bg-opt').forEach(b => {
+    b.addEventListener('click', () => {
+      $$('#bgGrid .bg-opt').forEach(x => x.classList.remove('active')); b.classList.add('active');
+      S.stkBg = b.dataset.bg;
+      if ($('solidColor')) $('solidColor').style.display = S.stkBg === 'solid' ? 'block' : 'none';
+    });
+  });
+  $$('#fontStylePills .pill').forEach(b => {
+    b.addEventListener('click', () => { $$('#fontStylePills .pill').forEach(x => x.classList.remove('active')); b.classList.add('active'); S.stkFw = b.dataset.fw; S.stkFs = b.dataset.fs; });
+  });
+  $('btnMakeStiker')?.addEventListener('click', renderStiker);
+  $('btnDlStiker')?.addEventListener('click', () => dlCanvas('stikerCanvas', `stiker-${Date.now()}.png`, 'image/png'));
+  $('btnDlStikerWp')?.addEventListener('click', () => dlCanvas('stikerCanvas', `stiker-${Date.now()}.webp`, 'image/webp'));
+  $('btnShareStiker')?.addEventListener('click', () => shareToWA('stikerCanvas', 'stiker.png'));
+}
+
+function renderStiker() {
+  const text = $('stkText')?.value.trim();
+  if (!text) { toast('Tulis teks stiker dulu!', 'error'); return; }
+  const size = parseInt($('stkCanvas')?.value) || 512;
+  const canvas = $('stikerCanvas');
+  if (!canvas) return;
+  canvas.width = size; canvas.height = size;
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0, 0, size, size);
+  const bgMap = { g1:['#667eea','#764ba2'], g2:['#f093fb','#f5576c'], g3:['#4facfe','#00f2fe'], g4:['#43e97b','#38f9d7'], g5:['#fa8231','#f7b731'], g6:['#2d3436','#636e72'] };
+  if (S.stkBg === 'solid') {
+    ctx.fillStyle = $('solidColor')?.value || '#7c6fff';
+    ctx.beginPath(); if (ctx.roundRect) ctx.roundRect(0,0,size,size,size*.07); else ctx.rect(0,0,size,size); ctx.fill();
+  } else if (bgMap[S.stkBg]) {
+    const g = ctx.createLinearGradient(0,0,size,size); g.addColorStop(0,bgMap[S.stkBg][0]); g.addColorStop(1,bgMap[S.stkBg][1]);
+    ctx.fillStyle = g; ctx.beginPath(); if (ctx.roundRect) ctx.roundRect(0,0,size,size,size*.07); else ctx.rect(0,0,size,size); ctx.fill();
+  }
+  const fs = parseInt($('stkSize')?.value) || 60;
+  ctx.font = `${S.stkFs} ${S.stkFw} ${fs}px Inter,Arial,sans-serif`;
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  const lines = wrapText(ctx, text, size - 60);
+  const lh = fs * 1.28;
+  const totalH = lines.length * lh;
+  const sy = (size - totalH) / 2 + fs / 2;
+  const outW = parseInt($('stkOutline')?.value) || 0;
+  if (outW > 0) { ctx.strokeStyle = $('stkOutlineColor')?.value || '#000'; ctx.lineWidth = outW*2; ctx.lineJoin = 'round'; lines.forEach((l,i) => ctx.strokeText(l, size/2, sy + i*lh)); }
+  ctx.fillStyle = $('stkColor')?.value || '#fff';
+  lines.forEach((l,i) => ctx.fillText(l, size/2, sy + i*lh));
+  $('stikerPh')?.classList.add('hidden');
+  if ($('stikerActions')) $('stikerActions').style.display = 'flex';
+  toast('Stiker siap! ✨', 'success');
+}
+
+function initBratMaker() {
+  let bratBg = '#8aba62', bratFg = '#000000';
+  $$('.brat-th').forEach(b => {
+    b.addEventListener('click', () => {
+      $$('.brat-th').forEach(x => x.classList.remove('active')); b.classList.add('active');
+      bratBg = b.dataset.bg; bratFg = b.dataset.fg;
+      if ($('bratBg')) $('bratBg').value = bratBg;
+      if ($('bratFg')) $('bratFg').value = bratFg;
+      if ($('bratText')?.value.trim()) makeBrat(bratBg, bratFg);
+    });
+  });
+  $('bratBg')?.addEventListener('input', e => { bratBg = e.target.value; $$('.brat-th').forEach(x => x.classList.remove('active')); });
+  $('bratFg')?.addEventListener('input', e => { bratFg = e.target.value; $$('.brat-th').forEach(x => x.classList.remove('active')); });
+  $('bratText')?.addEventListener('input', () => { if ($('bratText')?.value.trim()) makeBrat(bratBg, bratFg); });
+  $('btnMakeBrat')?.addEventListener('click', () => { if (!$('bratText')?.value.trim()) { toast('Tulis teks BRAT dulu!', 'error'); return; } makeBrat(bratBg, bratFg); });
+  $('btnDlBrat')?.addEventListener('click', () => dlCanvas('bratCanvas', `brat-${Date.now()}.png`, 'image/png'));
+  $('btnShareBrat')?.addEventListener('click', () => shareToWA('bratCanvas', 'brat.png'));
+
+  function makeBrat(bg, fg) {
+    const text = $('bratText')?.value.trim(); if (!text) return;
+    const ratio = $('bratRatio')?.value || '1:1';
+    let cW = 1080, cH = 1080;
+    if (ratio === '4:5') cH = 1350;
+    if (ratio === '9:16') cH = 1920;
+    const canvas = $('bratCanvas'); if (!canvas) return;
+    canvas.width = cW; canvas.height = cH;
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = bg; ctx.fillRect(0,0,cW,cH);
+    let fs = Math.min(cW * 0.2, 200);
+    ctx.font = `italic 700 ${fs}px Arial,sans-serif`;
+    const maxW = cW * 0.82;
+    while (ctx.measureText(text).width > maxW && fs > 36) { fs -= 3; ctx.font = `italic 700 ${fs}px Arial,sans-serif`; }
+    const lines = wrapText(ctx, text, maxW);
+    ctx.filter = 'blur(1.2px)'; ctx.fillStyle = fg; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    const lh = fs * 1.3; const totalH = lines.length * lh; const sy = (cH - totalH) / 2 + fs / 2;
+    lines.forEach((l,i) => ctx.fillText(l, cW/2, sy + i*lh));
+    ctx.filter = 'none';
+    $('bratPh')?.classList.add('hidden');
+    if ($('bratActions')) $('bratActions').style.display = 'flex';
+  }
+}
+
+const IQC_EMOJIS = ['👍','❤️','😂','😮','😢','🙏','🔥','💯','🥹','😍'];
+const IQC_DEFAULT_REACT = ['👍','❤️','😂','😮','🙏'];
+let S_iqcReact = [...IQC_DEFAULT_REACT];
+let iqcBubbleColor = 'out';
+
+function initIqcMaker() {
+  const picker = $('iqcEmojiPicker');
+  if (picker) {
+    IQC_EMOJIS.forEach(em => {
+      const btn = document.createElement('button');
+      btn.className = 'emoji-btn' + (S_iqcReact.includes(em) ? ' active' : '');
+      btn.textContent = em;
+      btn.addEventListener('click', () => {
+        const i = S_iqcReact.indexOf(em);
+        if (i > -1) {
+          S_iqcReact.splice(i, 1);
+          btn.classList.remove('active');
+        } else {
+          if (S_iqcReact.length >= 5) { toast('Maksimal 5 emoji reaksi', 'error'); return; }
+          S_iqcReact.push(em);
+          btn.classList.add('active');
+        }
+        renderIqc();
+      });
+      picker.appendChild(btn);
+    });
+  }
+
+  $$('#iqcBubbleColor .mt-btn').forEach(b => b.addEventListener('click', () => {
+    $$('#iqcBubbleColor .mt-btn').forEach(x => x.classList.remove('active'));
+    b.classList.add('active');
+    iqcBubbleColor = b.dataset.c;
+    renderIqc();
+  }));
+
+  $('iqcText')?.addEventListener('input', renderIqc);
+  $('iqcTime')?.addEventListener('input', renderIqc);
+  $('iqcRead')?.addEventListener('change', renderIqc);
+  $('iqcShowMenu')?.addEventListener('change', renderIqc);
+
+  $('btnMakeIqc')?.addEventListener('click', () => { renderIqc(); toast('IQC stiker siap! 🎉', 'success'); });
+  $('btnDlIqc')?.addEventListener('click', () => dlCanvas('iqcCanvas', `iqc-stiker-${Date.now()}.png`, 'image/png'));
+  $('btnShareIqc')?.addEventListener('click', () => shareToWA('iqcCanvas', 'iqc.png'));
+
+  renderIqc();
+}
+
+function roundRect(ctx, x, y, w, h, r) {
+  const rr = typeof r === 'number' ? { tl: r, tr: r, br: r, bl: r } : r;
+  ctx.beginPath();
+  ctx.moveTo(x + rr.tl, y);
+  ctx.lineTo(x + w - rr.tr, y);
+  ctx.arcTo(x + w, y, x + w, y + rr.tr, rr.tr);
+  ctx.lineTo(x + w, y + h - rr.br);
+  ctx.arcTo(x + w, y + h, x + w - rr.br, y + h, rr.br);
+  ctx.lineTo(x + rr.bl, y + h);
+  ctx.arcTo(x, y + h, x, y + h - rr.bl, rr.bl);
+  ctx.lineTo(x, y + rr.tl);
+  ctx.arcTo(x, y, x + rr.tl, y, rr.tl);
+  ctx.closePath();
+}
+
+function renderIqc() {
+  const canvas = $('iqcCanvas');
+  if (!canvas) return;
+  const reactions = S_iqcReact.length ? S_iqcReact : IQC_DEFAULT_REACT;
+  const mainText = $('iqcText')?.value?.trim() || 'selamat pagi 🎁🙏';
+  const time = $('iqcTime')?.value?.trim() || now();
+  const showMenu = $('iqcShowMenu')?.checked ?? true;
+  const isOut = iqcBubbleColor === 'out';
+
+  const bubbleBg = isOut ? '#144d43' : '#233138';
+  const textColor = '#ffffff';
+  const timeColor = 'rgba(255,255,255,.6)';
+
+  const W = 460;
+  const pad = 18;
+  const bubbleMaxW = W - 60;
+
+  const ctx = canvas.getContext('2d');
+  ctx.font = '400 24px Inter,Arial,sans-serif';
+  const mainLines = wrapText(ctx, mainText, bubbleMaxW - pad * 2);
+  let bubbleW = 0;
+  mainLines.forEach(l => { bubbleW = Math.max(bubbleW, ctx.measureText(l).width); });
+  bubbleW = Math.min(bubbleMaxW, Math.max(160, bubbleW + pad * 2 + 46));
+
+  const lineH = 30;
+  const bubbleH = 18 + mainLines.length * lineH + 26;
+
+  const reactSize = 42;
+  const reactGap = 6;
+  const reactPillW = reactions.length * (reactSize + reactGap) + reactGap;
+  const reactPillH = 58;
+
+  const menuItems = [{ label: 'Beri Bintang', icon: '★' }, { label: 'Balas', icon: '↩' }, { label: 'Teruskan', icon: '↪' }];
+  const menuW = 260, menuRowH = 52;
+  const menuH = showMenu ? menuItems.length * menuRowH : 0;
+
+  const topPad = 30, gap1 = 14, gap2 = 18, sidePad = 24;
+  const canvasW = W;
+  const canvasH = topPad + reactPillH + gap1 + bubbleH + (showMenu ? gap2 + menuH : 0) + 30;
+
+  canvas.width = canvasW; canvas.height = canvasH;
+  ctx.clearRect(0, 0, canvasW, canvasH);
+
+  const bgGrad = ctx.createLinearGradient(0, 0, 0, canvasH);
+  bgGrad.addColorStop(0, '#12211f');
+  bgGrad.addColorStop(1, '#0b1512');
+  ctx.fillStyle = bgGrad;
+  roundRect(ctx, 0, 0, canvasW, canvasH, 22);
+  ctx.fill();
+
+  const pillX = (canvasW - reactPillW) / 2, pillY = topPad;
+  ctx.fillStyle = 'rgba(30,32,34,.92)';
+  roundRect(ctx, pillX, pillY, reactPillW, reactPillH, reactPillH / 2); ctx.fill();
+  ctx.font = `${reactSize * 0.72}px serif`;
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  reactions.forEach((em, i) => {
+    const cx = pillX + reactGap + i * (reactSize + reactGap) + reactSize / 2;
+    ctx.fillText(em, cx, pillY + reactPillH / 2 + 1);
+  });
+
+  const bubbleX = canvasW - sidePad - bubbleW;
+  const bubbleY = pillY + reactPillH + gap1;
+  ctx.fillStyle = bubbleBg;
+  roundRect(ctx, bubbleX, bubbleY, bubbleW, bubbleH, { tl: 14, tr: 4, br: 14, bl: 14 });
+  ctx.fill();
+
+  ctx.textAlign = 'left'; ctx.textBaseline = 'top';
+  ctx.font = '400 24px Inter,Arial,sans-serif';
+  ctx.fillStyle = textColor;
+  let ty = bubbleY + 14;
+  mainLines.forEach(l => { ctx.fillText(l, bubbleX + pad, ty); ty += lineH; });
+
+  ctx.font = '400 15px Inter,Arial,sans-serif';
+  ctx.fillStyle = timeColor;
+  ctx.textAlign = 'right';
+  ctx.fillText(time, bubbleX + bubbleW - 14, bubbleY + bubbleH - 24);
+
+  if (showMenu) {
+    const menuX = canvasW - sidePad - menuW;
+    const menuY = bubbleY + bubbleH + gap2;
+    ctx.fillStyle = 'rgba(32,34,36,.96)';
+    roundRect(ctx, menuX, menuY, menuW, menuH, 14);
+    ctx.fill();
+
+    menuItems.forEach((it, i) => {
+      const rowY = menuY + i * menuRowH;
+      ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+      ctx.font = '400 20px Inter,Arial,sans-serif';
+      ctx.fillStyle = '#e9edef';
+      ctx.fillText(it.label, menuX + 20, rowY + menuRowH / 2);
+
+      ctx.textAlign = 'right';
+      ctx.font = '400 20px Arial,sans-serif';
+      ctx.fillStyle = '#8696a0';
+      ctx.fillText(it.icon, menuX + menuW - 20, rowY + menuRowH / 2);
+    });
+  }
+
+  $('iqcPh')?.classList.add('hidden');
+  if ($('iqcActions')) $('iqcActions').style.display = 'flex';
+}
+
+async function shareToWA(canvasId, filename) {
+  const canvas = $(canvasId);
+  if (!canvas) return;
+
+  canvas.toBlob(async blob => {
+    const file = new File([blob], filename, { type: 'image/png' });
+
+    if (navigator.share && navigator.canShare?.({ files: [file] })) {
+      try {
+        await navigator.share({ files: [file], title: 'XV10 Downloader', text: '' });
+        return;
+      } catch (e) {
+        if (e.name === 'AbortError') return;
+      }
+    }
+
+    if (navigator.clipboard?.write) {
+      try {
+        await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
+        toast('Gambar disalin ke clipboard! Tempelkan di WhatsApp.', 'success');
+        return;
+      } catch {}
+    }
+
+    dlCanvas(canvasId, filename, 'image/png');
+    toast('Gambar tersimpan! Kirim file ke WA secara manual.', 'info');
+  }, 'image/png', 0.95);
+}
+
+function dlCanvas(canvasId, filename, mime = 'image/png') {
+  const canvas = $(canvasId); if (!canvas) return;
+  canvas.toBlob(blob => {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href = url; a.download = filename;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 3000);
+    toast('File berhasil didownload! ✅', 'success');
+  }, mime, 0.95);
+}
+
+/* ── DOWNLOADER ── */
 function initDownloader() {
   $$('.plat-tab').forEach(b => b.addEventListener('click', () => {
     $$('.plat-tab').forEach(x => x.classList.remove('active')); b.classList.add('active');
     S.platform = b.dataset.plat; updateDlUI(S.platform);
   }));
-
   $$('.fmt-tab').forEach(b => b.addEventListener('click', () => {
     $$('.fmt-tab').forEach(x => x.classList.remove('active')); b.classList.add('active');
     S.format = b.dataset.fmt;
   }));
-
   $('dlPaste')?.addEventListener('click', async () => {
-    try { 
-      const t = await navigator.clipboard.readText(); 
-      if ($('dlUrl')) $('dlUrl').value = t; 
-      toast('Link berhasil ditempel!', 'success'); 
-    } catch { 
-      toast('Izin clipboard ditolak', 'error'); 
-    }
+    try {
+      const t = await navigator.clipboard.readText();
+      if ($('dlUrl')) $('dlUrl').value = t;
+      toast('Link berhasil ditempel!', 'success');
+    } catch { toast('Izin akses clipboard ditolak', 'error'); }
   });
-
   $('dlBtn')?.addEventListener('click', startDl);
 }
 
 const DL_META = {
-  tiktok:    { cls:'tt', icon:'<i class="fa-brands fa-tiktok"></i>', title:'TikTok Downloader', sub:'Tanpa watermark · MP4 / MP3', ph:'https://www.tiktok.com/@user/video/...', mp3:true },
-  instagram: { cls:'ig', icon:'<i class="fa-brands fa-instagram"></i>', title:'Instagram Downloader', sub:'Reels / Post / Carousel · MP4', ph:'https://www.instagram.com/reel/...', mp3:false },
-  youtube:   { cls:'yt', icon:'<i class="fa-brands fa-youtube"></i>', title:'YouTube Downloader', sub:'Video / Audio · MP4 / MP3', ph:'https://www.youtube.com/watch?v=...', mp3:true },
+  tiktok: { cls: 'tt', icon: '<i class="fa-brands fa-tiktok"></i>', title: 'TikTok Downloader', sub: 'Tanpa watermark · MP4 / MP3', ph: 'https://www.tiktok.com/@user/video/...', mp3: true },
+  instagram: { cls: 'ig', icon: '<i class="fa-brands fa-instagram"></i>', title: 'Instagram Downloader', sub: 'Reels / Story / Post · MP4', ph: 'https://www.instagram.com/reel/...', mp3: false },
+  youtube: { cls: 'yt', icon: '<i class="fa-brands fa-youtube"></i>', title: 'YouTube Downloader', sub: 'Video / Audio · MP4 / MP3', ph: 'https://www.youtube.com/watch?v=...', mp3: true },
 };
 
 function updateDlUI(plat) {
-  const m = DL_META[plat] || DL_META.tiktok;
-  const icon = $('dlIcon'); 
+  const m = DL_META[plat];
+  if (!m) return;
+  const icon = $('dlIcon');
   if (icon) { icon.className = `dl-icon ${m.cls}`; icon.innerHTML = m.icon; }
-  if ($('dlTitle')) $('dlTitle').textContent = m.title; 
+  if ($('dlTitle')) $('dlTitle').textContent = m.title;
   if ($('dlSub')) $('dlSub').textContent = m.sub;
   if ($('dlUrl')) $('dlUrl').placeholder = m.ph;
-
   if ($('mp3Tab')) $('mp3Tab').style.display = m.mp3 ? 'flex' : 'none';
   if (!m.mp3 && S.format === 'mp3') {
     $$('.fmt-tab').forEach(x => x.classList.remove('active'));
-    document.querySelector('.fmt-tab[data-fmt="mp4"]')?.classList.add('active'); 
+    document.querySelector('.fmt-tab[data-fmt="mp4"]')?.classList.add('active');
     S.format = 'mp4';
   }
   resetDlUI();
@@ -110,11 +446,11 @@ function resetDlUI() {
   if ($('dlResult')) $('dlResult').style.display = 'none';
   if ($('dlError')) $('dlError').style.display = 'none';
 }
+window.resetDl = resetDlUI;
 
 async function startDl() {
   const url = $('dlUrl')?.value.trim();
-  if (!url) { toast('Masukkan link video dulu!', 'error'); return; }
-
+  if (!url) { toast('Masukkan link video terlebih dahulu!', 'error'); return; }
   resetDlUI();
   if ($('dlLoading')) $('dlLoading').style.display = 'block';
   if ($('dlBtn')) $('dlBtn').disabled = true;
@@ -136,97 +472,86 @@ async function startDl() {
     if ($('dlError')) $('dlError').style.display = 'block';
     if ($('dlErrMsg')) $('dlErrMsg').textContent = err.message;
     toast(err.message, 'error');
-  } finally { 
-    if ($('dlBtn')) $('dlBtn').disabled = false; 
+  } finally {
+    if ($('dlBtn')) $('dlBtn').disabled = false;
   }
 }
 
 function renderDlResult(data) {
   if ($('dlThumb')) $('dlThumb').src = data.thumbnail || 'https://placehold.co/130x90/0c0e1c/7c6fff?text=Media';
-  if ($('dlResTitle')) $('dlResTitle').textContent = data.title || 'Media Downloader';
-  if ($('dlResMeta')) $('dlResMeta').textContent = (data.platform || 'MEDIA').toUpperCase();
+  if ($('dlResTitle')) $('dlResTitle').textContent = data.title || 'Media File';
 
-  const btns = $('dlrBtns'); 
-  if (!btns) return;
-  btns.innerHTML = '';
+  let meta = data.platform || S.platform;
+  if (data.author) meta += ' · ' + data.author;
+  if (data.duration) meta += ' · ' + data.duration;
+  if ($('dlResMeta')) $('dlResMeta').textContent = meta;
 
-  if (data.fallback && data.message) {
-    const n = document.createElement('div'); 
-    n.className = 'fallback-note';
-    n.style.cssText = 'color: #ffcc00; margin-bottom: 10px; font-size: 14px;';
-    n.innerHTML = `<i class="fa-solid fa-triangle-exclamation"></i> ${data.message}`; 
-    btns.appendChild(n);
+  const btns = $('dlrBtns');
+  if (btns) {
+    btns.innerHTML = '';
+    if (data.fallback && data.message) {
+      const n = document.createElement('div');
+      n.className = 'fallback-note';
+      n.style.cssText = 'font-size:12px;color:#facc15;margin-bottom:8px;';
+      n.innerHTML = `<i class="fa-solid fa-triangle-exclamation"></i> ${data.message}`;
+      btns.appendChild(n);
+    }
+
+    (data.links || []).forEach(lnk => {
+      const isFb = lnk.fallback || lnk.label.startsWith('🌐');
+      const btn = document.createElement('button');
+      btn.className = 'dlr-btn' + (isFb ? ' fb' : '');
+      btn.innerHTML = `<i class="fa-solid ${isFb ? 'fa-arrow-up-right-from-square' : 'fa-download'}"></i> ${lnk.label}`;
+      btn.addEventListener('click', () => {
+        if (isFb) {
+          window.open(lnk.url, '_blank');
+        } else {
+          proxyDownload(lnk.url, lnk.filename || 'media.mp4', btn);
+        }
+      });
+      btns.appendChild(btn);
+    });
   }
 
-  (data.links || []).forEach(lnk => {
-    const isFb = lnk.fallback || lnk.label.startsWith('🌐');
-    const btn = document.createElement('button');
-    btn.className = 'dlr-btn' + (isFb ? ' fb' : '');
-    btn.innerHTML = `<i class="fa-solid ${isFb ? 'fa-arrow-up-right-from-square' : 'fa-download'}"></i> ${lnk.label}`;
-
-    btn.addEventListener('click', () => { 
-      if (isFb) {
-        window.open(lnk.url, '_blank');
-      } else {
-        proxyDownload(lnk.url, lnk.filename || 'video.mp4', btn); 
-      }
-    });
-    btns.appendChild(btn);
-  });
-
   if ($('dlResult')) $('dlResult').style.display = 'block';
-  toast(data.fallback ? 'Klik tombol untuk membuka download 🔗' : 'Media siap didownload! 🎉', data.fallback ? 'info' : 'success');
+  toast(data.fallback ? 'Klik opsi alternatif untuk mengunduh 🔗' : 'Siap didownload! 🎉', data.fallback ? 'info' : 'success');
 }
 
 async function proxyDownload(fileUrl, filename, btn) {
   const orig = btn.innerHTML;
-  btn.disabled = true; 
+  btn.disabled = true;
   btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Mengunduh...';
-
   try {
     const proxyUrl = `${BACKEND}/api/proxy-download?url=${encodeURIComponent(fileUrl)}&filename=${encodeURIComponent(filename)}`;
     const res = await fetch(proxyUrl);
-
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-
+    if (!res.ok) throw new Error(`HTTP Error ${res.status}`);
     const blob = await res.blob();
     const bUrl = URL.createObjectURL(blob);
-    const a = document.createElement('a'); 
-    a.href = bUrl; 
-    a.download = filename;
-    document.body.appendChild(a); 
-    a.click(); 
-    document.body.removeChild(a);
-
+    const a = document.createElement('a'); a.href = bUrl; a.download = filename;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
     setTimeout(() => URL.revokeObjectURL(bUrl), 5000);
     toast('Download berhasil! ✅', 'success');
   } catch (err) {
-    toast('Gagal mengunduh langsung, mengalihkan ke tab baru...', 'info');
+    toast('Gagal mengalirkan data, membuka tautan secara langsung...', 'info');
     window.open(fileUrl, '_blank');
-  } finally { 
-    btn.disabled = false; 
-    btn.innerHTML = orig; 
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = orig;
   }
 }
 
 function toast(msg, type = 'info') {
-  const icons = { success:'fa-circle-check', error:'fa-circle-exclamation', info:'fa-circle-info' };
-  const el = document.createElement('div'); 
-  el.className = `toast ${type}`;
-  el.innerHTML = `<i class="fa-solid ${icons[type]||icons.info}"></i> <span>${esc(msg)}</span>`;
-
-  let container = $('toasts');
-  if (!container) {
-    container = document.createElement('div');
-    container.id = 'toasts';
-    document.body.appendChild(container);
+  const icons = { success: 'fa-circle-check', error: 'fa-circle-exclamation', info: 'fa-circle-info' };
+  const el = document.createElement('div'); el.className = `toast ${type}`;
+  el.innerHTML = `<i class="fa-solid ${icons[type] || icons.info}"></i><span>${esc(msg)}</span>`;
+  const container = $('toasts');
+  if (container) {
+    container.appendChild(el);
+    setTimeout(() => {
+      el.style.transition = 'all .28s ease';
+      el.style.opacity = '0';
+      el.style.transform = 'translateX(16px)';
+      setTimeout(() => el.remove(), 280);
+    }, 3400);
   }
-
-  container.appendChild(el);
-  setTimeout(() => { 
-    el.style.transition='all .28s ease'; 
-    el.style.opacity='0'; 
-    el.style.transform='translateX(16px)'; 
-    setTimeout(()=>el.remove(),280); 
-  }, 3400);
 }
