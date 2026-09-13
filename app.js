@@ -1,17 +1,14 @@
 /* ═══════════════════════════════════════
-  XV10 Downloader — App Logic Fix
+   XV10 Downloader — App Logic Fix
 ═══════════════════════════════════════ */
 
-const BACKEND = (location.hostname === 'localhost' || location.hostname === '127.0.0.1')
-  ? `http://localhost:${location.port || 3000}` : location.origin;
+// BACKEND otomatis menggunakan window.location.origin
+const BACKEND = window.location.origin;
 
 const S = {
   platform: 'tiktok',
   format: 'mp4',
-  makerTab: 'stiker',
-  stkBg: 'transparent',
-  stkFw: '800',
-  stkFs: 'normal',
+  page: 'dl'
 };
 
 async function apiFetch(path, opts) {
@@ -19,7 +16,7 @@ async function apiFetch(path, opts) {
   try {
     res = await fetch(`${BACKEND}${path}`, opts);
   } catch (netErr) {
-    throw new Error(`Server backend tidak bisa dihubungi (${BACKEND}). Cek koneksi server.`);
+    throw new Error(`Gagal terhubung ke server. Cek koneksi internet Anda.`);
   }
   return res;
 }
@@ -27,7 +24,6 @@ async function apiFetch(path, opts) {
 const $ = id => document.getElementById(id);
 const $$ = s => document.querySelectorAll(s);
 const esc = s => { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; };
-const now = () => new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
 
 document.addEventListener('DOMContentLoaded', () => {
   initNav();
@@ -40,8 +36,8 @@ function initNav() {
     b.addEventListener('click', () => { const p = b.dataset.p; if (p) { goTo(p); closeSidebar(); } });
   });
   $('menuBtn')?.addEventListener('click', () => {
-    document.getElementById('sidebar').classList.add('open');
-    $('mobOverlay').classList.add('show');
+    document.getElementById('sidebar')?.classList.add('open');
+    $('mobOverlay')?.classList.add('show');
   });
   $('mobOverlay')?.addEventListener('click', closeSidebar);
 }
@@ -55,12 +51,12 @@ function goTo(p) {
 }
 
 function closeSidebar() {
-  document.getElementById('sidebar').classList.remove('open');
-  $('mobOverlay').classList.remove('show');
+  document.getElementById('sidebar')?.classList.remove('open');
+  $('mobOverlay')?.classList.remove('show');
 }
 
 /* ══════════════════════════════════════
-   DOWNLOADER LOGIC
+    DOWNLOADER LOGIC
 ══════════════════════════════════════ */
 function initDownloader() {
   $$('.plat-tab').forEach(b => b.addEventListener('click', () => {
@@ -76,7 +72,7 @@ function initDownloader() {
   $('dlPaste')?.addEventListener('click', async () => {
     try { 
       const t = await navigator.clipboard.readText(); 
-      $('dlUrl').value = t; 
+      if ($('dlUrl')) $('dlUrl').value = t; 
       toast('Link berhasil ditempel!', 'success'); 
     } catch { 
       toast('Izin clipboard ditolak', 'error'); 
@@ -93,13 +89,13 @@ const DL_META = {
 };
 
 function updateDlUI(plat) {
-  const m = DL_META[plat];
+  const m = DL_META[plat] || DL_META.tiktok;
   const icon = $('dlIcon'); 
   if (icon) { icon.className = `dl-icon ${m.cls}`; icon.innerHTML = m.icon; }
   if ($('dlTitle')) $('dlTitle').textContent = m.title; 
   if ($('dlSub')) $('dlSub').textContent = m.sub;
   if ($('dlUrl')) $('dlUrl').placeholder = m.ph;
-  
+
   if ($('mp3Tab')) $('mp3Tab').style.display = m.mp3 ? 'flex' : 'none';
   if (!m.mp3 && S.format === 'mp3') {
     $$('.fmt-tab').forEach(x => x.classList.remove('active'));
@@ -116,12 +112,12 @@ function resetDlUI() {
 }
 
 async function startDl() {
-  const url = $('dlUrl').value.trim();
+  const url = $('dlUrl')?.value.trim();
   if (!url) { toast('Masukkan link video dulu!', 'error'); return; }
-  
+
   resetDlUI();
-  $('dlLoading').style.display = 'block';
-  $('dlBtn').disabled = true;
+  if ($('dlLoading')) $('dlLoading').style.display = 'block';
+  if ($('dlBtn')) $('dlBtn').disabled = true;
 
   try {
     const res = await apiFetch('/api/download', {
@@ -132,25 +128,26 @@ async function startDl() {
 
     const data = await res.json();
     if (!res.ok || data.error) throw new Error(data.error || 'Terjadi kesalahan pada server');
-    
-    $('dlLoading').style.display = 'none';
+
+    if ($('dlLoading')) $('dlLoading').style.display = 'none';
     renderDlResult(data);
   } catch (err) {
-    $('dlLoading').style.display = 'none';
-    $('dlError').style.display = 'block';
-    $('dlErrMsg').textContent = err.message;
+    if ($('dlLoading')) $('dlLoading').style.display = 'none';
+    if ($('dlError')) $('dlError').style.display = 'block';
+    if ($('dlErrMsg')) $('dlErrMsg').textContent = err.message;
     toast(err.message, 'error');
   } finally { 
-    $('dlBtn').disabled = false; 
+    if ($('dlBtn')) $('dlBtn').disabled = false; 
   }
 }
 
 function renderDlResult(data) {
   if ($('dlThumb')) $('dlThumb').src = data.thumbnail || 'https://placehold.co/130x90/0c0e1c/7c6fff?text=Media';
   if ($('dlResTitle')) $('dlResTitle').textContent = data.title || 'Media Downloader';
-  if ($('dlResMeta')) $('dlResMeta').textContent = data.platform.toUpperCase();
+  if ($('dlResMeta')) $('dlResMeta').textContent = (data.platform || 'MEDIA').toUpperCase();
 
   const btns = $('dlrBtns'); 
+  if (!btns) return;
   btns.innerHTML = '';
 
   if (data.fallback && data.message) {
@@ -166,7 +163,7 @@ function renderDlResult(data) {
     const btn = document.createElement('button');
     btn.className = 'dlr-btn' + (isFb ? ' fb' : '');
     btn.innerHTML = `<i class="fa-solid ${isFb ? 'fa-arrow-up-right-from-square' : 'fa-download'}"></i> ${lnk.label}`;
-    
+
     btn.addEventListener('click', () => { 
       if (isFb) {
         window.open(lnk.url, '_blank');
@@ -177,7 +174,7 @@ function renderDlResult(data) {
     btns.appendChild(btn);
   });
 
-  $('dlResult').style.display = 'block';
+  if ($('dlResult')) $('dlResult').style.display = 'block';
   toast(data.fallback ? 'Klik tombol untuk membuka download 🔗' : 'Media siap didownload! 🎉', data.fallback ? 'info' : 'success');
 }
 
@@ -189,9 +186,9 @@ async function proxyDownload(fileUrl, filename, btn) {
   try {
     const proxyUrl = `${BACKEND}/api/proxy-download?url=${encodeURIComponent(fileUrl)}&filename=${encodeURIComponent(filename)}`;
     const res = await fetch(proxyUrl);
-    
+
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    
+
     const blob = await res.blob();
     const bUrl = URL.createObjectURL(blob);
     const a = document.createElement('a'); 
@@ -200,7 +197,7 @@ async function proxyDownload(fileUrl, filename, btn) {
     document.body.appendChild(a); 
     a.click(); 
     document.body.removeChild(a);
-    
+
     setTimeout(() => URL.revokeObjectURL(bUrl), 5000);
     toast('Download berhasil! ✅', 'success');
   } catch (err) {
@@ -217,14 +214,14 @@ function toast(msg, type = 'info') {
   const el = document.createElement('div'); 
   el.className = `toast ${type}`;
   el.innerHTML = `<i class="fa-solid ${icons[type]||icons.info}"></i> <span>${esc(msg)}</span>`;
-  
+
   let container = $('toasts');
   if (!container) {
     container = document.createElement('div');
     container.id = 'toasts';
     document.body.appendChild(container);
   }
-  
+
   container.appendChild(el);
   setTimeout(() => { 
     el.style.transition='all .28s ease'; 
