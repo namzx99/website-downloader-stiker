@@ -434,17 +434,22 @@ app.get('/api/health', (req, res) => res.json({ ok: true, v: '6.0.0' }));
 app.get('/style.css', (req, res) => res.sendFile(path.join(__dirname, 'style.css')));
 app.get('/app.js', (req, res) => res.sendFile(path.join(__dirname, 'app.js')));
 app.use('/api', (req, res) => res.status(404).json({ error: `API route tidak ditemukan: ${req.method} ${req.path}` }));
+app.use((err, req, res, next) => {
+  console.error('[API ERROR]', err);
+  if (res.headersSent) return next(err);
+  res.status(500).json({ error: 'Server gagal memproses request' });
+});
 // Catch-all buat SPA fallback — pakai regex (bukan string '*') biar kompatibel
 // dengan Express 5 juga (Express 5 ganti cara parsing wildcard string).
 app.get(/.*/, (req, res) => res.sendFile(path.join(__dirname, 'index.html')));
 
 process.on('uncaughtException', err => {
-  console.error('\n❌ UNCAUGHT ERROR — server berhenti karena ini:\n', err);
-  process.exit(1);
+  console.error('\n❌ UNCAUGHT ERROR:\n', err);
+  if (!process.env.VERCEL) process.exit(1);
 });
 process.on('unhandledRejection', err => {
-  console.error('\n❌ UNHANDLED REJECTION — server berhenti karena ini:\n', err);
-  process.exit(1);
+  console.error('\n❌ UNHANDLED REJECTION:\n', err);
+  if (!process.env.VERCEL) process.exit(1);
 });
 
 module.exports = app;
