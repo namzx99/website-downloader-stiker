@@ -3,7 +3,6 @@ import cors from 'cors';
 import fetch from 'node-fetch';
 
 const app = express();
-const PORT = process.env.PORT || 3000;
 
 app.use(cors());
 app.use(express.json());
@@ -46,6 +45,7 @@ async function fetchFromCobalt(url, isAudioOnly = false) {
   throw lastError || new Error('Semua server pengunduh sedang sibuk.');
 }
 
+// Handler Endpoint Download
 app.post('/api/download', async (req, res) => {
   try {
     const { url, platform, format } = req.body;
@@ -87,7 +87,7 @@ app.post('/api/download', async (req, res) => {
         fallback: true,
         platform: platform || 'media',
         title: `Download ${platform ? platform.toUpperCase() : 'Media'}`,
-        message: 'Server otomatis sedang penuh. Klik tombol di bawah untuk langsung ambil videonya.',
+        message: 'Server otomatis sedang padat. Klik tombol di bawah untuk langsung ambil videonya.',
         links: [
           {
             url: `https://cobalt.tools/?url=${encodeURIComponent(url)}`,
@@ -102,6 +102,7 @@ app.post('/api/download', async (req, res) => {
   }
 });
 
+// Handler Proxy Stream Download
 app.get('/api/proxy-download', async (req, res) => {
   const fileUrl = req.query.url;
   const filename = req.query.filename || 'download.mp4';
@@ -122,8 +123,7 @@ app.get('/api/proxy-download', async (req, res) => {
   }
 });
 
-export default app;
-
-if (process.env.NODE_ENV !== 'production') {
-  app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
-}
+// Handler Ekspor untuk Vercel Serverless Function
+export default (req, res) => {
+  return app(req, res);
+};
