@@ -14,7 +14,6 @@ const { exec } = require('child_process');
 
 const app  = express();
 const PORT = process.env.PORT || 3000;
-let youtubeClientPromise;
 
 app.use(cors());
 app.use(express.json({ limit: '50mb' }));
@@ -101,56 +100,10 @@ function getStrategies(url, plat, format) {
     { name: 'ytdlp',     fn: () => dlYtdlp(url, format) },
   ];
   if (plat === 'YouTube') return [
-    { name: 'youtube-inner-tube', fn: () => dlYoutubeInnerTube(url, format) },
     { name: 'ytdlp',     fn: () => dlYtdlp(url, format) },
     { name: 'y2mate',    fn: () => dlY2Mate(url, format) },
   ];
   return [{ name: 'ytdlp', fn: () => dlYtdlp(url, format) }];
-}
-
-async function dlYoutubeInnerTube(url, format) {
-  const videoId = getYoutubeId(url);
-  if (!videoId) throw new Error('URL YouTube tidak valid');
-
-  youtubeClientPromise ||= import('youtubei.js').then(({ Innertube }) => Innertube.create());
-  const youtube = await youtubeClientPromise;
-  const info = await youtube.getInfo(videoId);
-  const streaming = info.streaming_data;
-  if (!streaming) throw new Error('YouTube tidak mengirim data stream');
-
-  const progressive = streaming.formats || [];
-  const adaptive = streaming.adaptive_formats || [];
-  const isAudio = format === 'mp3';
-  const candidates = (isAudio ? adaptive : progressive).filter(item => {
-    const hasVideo = item.has_video ?? item.hasVideo;
-    const hasAudio = item.has_audio ?? item.hasAudio;
-    return item.url && (isAudio ? hasAudio && !hasVideo : hasVideo && hasAudio);
-  });
-  const selected = candidates.sort((a, b) => (b.bitrate || 0) - (a.bitrate || 0))[0];
-  if (!selected?.url) throw new Error(`YouTube tidak menyediakan ${isAudio ? 'audio' : 'MP4'} langsung`);
-
-  const mime = String(selected.mime_type || selected.mimeType || '');
-  const extension = mime.includes('mp4') ? 'mp4' : 'webm';
-  return {
-    title: info.basic_info?.title || 'YouTube Video',
-    thumbnail: info.basic_info?.thumbnail?.[0]?.url || '',
-    platform: 'YouTube',
-    links: [{
-      label: `⬇️ Download ${isAudio ? 'Audio' : 'MP4'}`,
-      url: selected.url,
-      filename: `youtube.${extension}`,
-    }],
-  };
-}
-
-function getYoutubeId(url) {
-  try {
-    const parsed = new URL(url);
-    if (parsed.hostname === 'youtu.be') return parsed.pathname.slice(1).split('/')[0];
-    return parsed.searchParams.get('v') || parsed.pathname.match(/\/shorts\/([^/]+)/)?.[1] || '';
-  } catch {
-    return '';
-  }
 }
 
 // ── helpers ───────────────────────────────────────────────
