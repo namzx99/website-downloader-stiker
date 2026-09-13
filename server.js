@@ -1,17 +1,26 @@
 import express from 'express';
 import cors from 'cors';
 import fetch from 'node-fetch';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const app = express();
 
 app.use(cors());
 app.use(express.json());
 
-// Daftar publik instansi Cobalt yang lebih stabil
+// Melayani file frontend statis (index.html, app.js, css)
+app.use(express.static(__dirname));
+
+// Daftar instansi Cobalt API publik yang aktif
 const COBALT_INSTANCES = [
   'https://api.cobalt.tools',
   'https://cobalt-api.kwiatekm.tokyo',
-  'https://cobalt.twi.tf'
+  'https://cobalt.twi.tf',
+  'https://co.wuk.sh'
 ];
 
 async function fetchFromCobalt(url, isAudioOnly = false) {
@@ -47,7 +56,7 @@ async function fetchFromCobalt(url, isAudioOnly = false) {
   throw lastError || new Error('Semua server pengunduh sedang sibuk.');
 }
 
-// API Download
+// Endpoint API Download
 app.post('/api/download', async (req, res) => {
   try {
     const { url, platform, format } = req.body;
@@ -104,7 +113,7 @@ app.post('/api/download', async (req, res) => {
   }
 });
 
-// Proxy Stream Download
+// Endpoint Proxy Stream Download
 app.get('/api/proxy-download', async (req, res) => {
   const fileUrl = req.query.url;
   const filename = req.query.filename || 'download.mp4';
@@ -120,11 +129,15 @@ app.get('/api/proxy-download', async (req, res) => {
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
     res.setHeader('Content-Type', response.headers.get('content-type') || 'application/octet-stream');
     
-    // Node-fetch stream to Express response
     response.body.pipe(res);
   } catch (err) {
     res.redirect(fileUrl);
   }
+});
+
+// Route Fallback: Melayani index.html untuk semua akses non-API
+app.get('*', (req, res) => {
+  res.sendFile(path.join(__dirname, 'index.html'));
 });
 
 export default app;
