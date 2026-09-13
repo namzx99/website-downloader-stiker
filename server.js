@@ -66,8 +66,10 @@ app.post('/api/download', async (req, res) => {
     }
   }
 
-  console.log('[DL] all failed → fallback');
-  res.json(buildFallback(cleanUrl, plat));
+  console.log('[DL] all strategies failed');
+  return res.status(502).json({
+    error: `Video ${plat} tidak berhasil diproses saat ini. Coba link publik lain atau ulangi beberapa saat lagi.`,
+  });
 });
 
 // ── URL normalizer ────────────────────────────────────────
@@ -312,18 +314,6 @@ function dlYtdlp(url, format) {
     }
     tryCmd();
   });
-}
-
-// ── Fallback ──────────────────────────────────────────────
-function buildFallback(url, plat) {
-  const enc = encodeURIComponent(url);
-  const map = {
-    TikTok:    [{ label:'🌐 SSSTik', url:`https://ssstik.io/#url=${enc}` }, { label:'🌐 SnapTik', url:`https://snaptik.app/?url=${enc}` }, { label:'🌐 TikDownload', url:`https://tikdownload.io/#${enc}` }],
-    Instagram: [{ label:'🌐 SaveInsta', url:`https://saveinsta.app/?url=${enc}` }, { label:'🌐 SnapSave', url:`https://snapsave.app/` }, { label:'🌐 InSave', url:`https://insave.io/?url=${enc}` }],
-    YouTube:   [{ label:'🌐 Y2Mate', url:`https://www.y2mate.com/youtube/${enc}` }, { label:'🌐 9xBuddy', url:`https://9xbuddy.in/process?url=${enc}` }, { label:'🌐 SaveFrom', url:`https://en.savefrom.net/#url=${enc}` }],
-  };
-  const links = (map[plat]||[{ label:'🌐 SaveFrom', url:`https://en.savefrom.net/#url=${enc}` }]).map(l=>({...l,filename:'video.mp4',fallback:true}));
-  return { title:'Buka via website downloader', thumbnail:'', platform:plat, fallback:true, message:'Klik tombol → paste link di website tersebut', links };
 }
 
 // ════════════════════════════════════════════════════════
