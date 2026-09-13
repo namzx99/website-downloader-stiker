@@ -11,6 +11,9 @@ const fs      = require('fs');
 const https   = require('https');
 const http    = require('http');
 const { exec } = require('child_process');
+const ytdl    = require('@distube/ytdl-core');
+
+let youtubeClientPromise;
 
 const app  = express();
 const PORT = process.env.PORT || 3000;
@@ -100,10 +103,75 @@ function getStrategies(url, plat, format) {
     { name: 'ytdlp',     fn: () => dlYtdlp(url, format) },
   ];
   if (plat === 'YouTube') return [
+    { name: 'youtube-innertube', fn: () => dlYoutubeInnerTube(url, format) },
+    { name: 'youtube-direct', fn: () => dlYoutubeDirect(url, format) },
     { name: 'ytdlp',     fn: () => dlYtdlp(url, format) },
     { name: 'y2mate',    fn: () => dlY2Mate(url, format) },
   ];
   return [{ name: 'ytdlp', fn: () => dlYtdlp(url, format) }];
+}
+
+// ── YouTube InnerTube stream ─────────────────────────────
+async function dlYoutubeInnerTube(url, format) {
+  const videoId = extractYoutubeId(url);
+  if (!videoId) throw new Error('invalid YouTube URL');
+  youtubeClientPromise ||= import('youtubei.js').then(({ Innertube }) => Innertube.create());
+  const youtube = await youtubeClientPromise;
+  const info = await youtube.getInfo(videoId);
+  const formats = info.streaming_data?.formats || [];
+  const audioFormats = info.streaming_data?.adaptive_formats || [];
+  const pool = format === 'mp3' ? audioFormats : formats.filter(item => item.has_video && item.has_audio);
+  const selected = [...pool]
+    .filter(item => item.url)
+    .sort((a, b) => (b.bitrate || 0) - (a.bitrate || 0))[0];
+  if (!selected?.url) throw new Error('YouTube tidak mengirim direct stream');
+  const extension = String(selected.mime_type || '').includes('mp4') ? 'mp4' : 'webm';
+  return {
+    title: info.basic_info?.title || 'YouTube Video',
+    thumbnail: info.basic_info?.thumbnail?.[0]?.url || '',
+    platform: 'YouTube',
+    links: [{ label: `⬇️ ${format === 'mp3' ? 'Audio' : 'MP4'} langsung`, url: selected.url, filename: `youtube.${extension}` }],
+  };
+}
+
+function extractYoutubeId(url) {
+  try {
+    const parsed = new URL(url);
+    if (parsed.hostname.includes('youtu.be')) return parsed.pathname.slice(1).split('/')[0];
+    return parsed.searchParams.get('v') || parsed.pathname.match(/\/shorts\/([^/]+)/)?.[1] || '';
+  } catch { return ''; }
+}
+
+// ── YouTube direct stream ────────────────────────────────
+async function dlYoutubeDirect(url, format) {
+  if (!ytdl.validateURL(url)) throw new Error('invalid YouTube URL');
+  const info = await ytdl.getInfo(url);
+  let selected;
+  if (format === 'mp3') {
+    selected = ytdl.chooseFormat(info.formats, {
+      quality: 'highestaudio',
+      filter: item => item.hasAudio && !item.hasVideo,
+    });
+  } else {
+    selected = ytdl.chooseFormat(info.formats, {
+      quality: 'highest',
+      filter: item => item.hasAudio && item.hasVideo && item.container === 'mp4',
+    });
+    if (!selected?.url) {
+      selected = ytdl.chooseFormat(info.formats, {
+        quality: 'highest',
+        filter: item => item.hasAudio && item.hasVideo,
+      });
+    }
+  }
+  if (!selected?.url) throw new Error('YouTube tidak menyediakan format yang sesuai');
+  const extension = format === 'mp3' ? (selected.container || 'webm') : 'mp4';
+  return {
+    title: info.videoDetails?.title || 'YouTube Video',
+    thumbnail: info.videoDetails?.thumbnails?.at(-1)?.url || '',
+    platform: 'YouTube',
+    links: [{ label: `⬇️ ${format.toUpperCase()} langsung`, url: selected.url, filename: `youtube.${extension}` }],
+  };
 }
 
 // ── helpers ───────────────────────────────────────────────
