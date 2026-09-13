@@ -542,20 +542,15 @@ function renderDlResult(data) {
   if (data.duration) meta += ' · ' + data.duration;
   $('dlResMeta').textContent = meta;
   const btns = $('dlrBtns'); btns.innerHTML = '';
-  if (data.fallback && data.message) {
-    const n = document.createElement('div'); n.className = 'fallback-note';
-    n.innerHTML = `<i class="fa-solid fa-triangle-exclamation"></i> ${data.message}`; btns.appendChild(n);
-  }
   (data.links || []).forEach(lnk => {
-    const isFb = lnk.fallback || lnk.label.startsWith('🌐');
     const btn = document.createElement('button');
-    btn.className = 'dlr-btn' + (isFb ? ' fb' : '');
-    btn.innerHTML = `<i class="fa-solid ${isFb ? 'fa-arrow-up-right-from-square' : 'fa-download'}"></i> ${lnk.label}`;
-    btn.addEventListener('click', () => { isFb ? window.open(lnk.url, '_blank') : proxyDownload(lnk.url, lnk.filename || 'video.mp4', btn); });
+    btn.className = 'dlr-btn';
+    btn.innerHTML = `<i class="fa-solid fa-download"></i> ${lnk.label}`;
+    btn.addEventListener('click', () => proxyDownload(lnk.url, lnk.filename || 'video.mp4', btn));
     btns.appendChild(btn);
   });
   $('dlResult').style.display = 'block';
-  toast(data.fallback ? 'Klik tombol untuk download 🔗' : 'Siap didownload! 🎉', data.fallback ? 'info' : 'success');
+  toast('Siap didownload dari server kamu! 🎉', 'success');
 }
 
 async function proxyDownload(fileUrl, filename, btn) {
@@ -572,8 +567,7 @@ async function proxyDownload(fileUrl, filename, btn) {
     setTimeout(() => URL.revokeObjectURL(bUrl), 5000);
     toast('Download berhasil! ✅', 'success');
   } catch (err) {
-    toast('Gagal stream, mencoba buka langsung...', 'info');
-    window.open(fileUrl, '_blank');
+    toast(`Gagal download dari server: ${err.message}`, 'error');
   } finally { btn.disabled = false; btn.innerHTML = orig; }
 }
 
