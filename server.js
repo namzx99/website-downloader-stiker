@@ -1,31 +1,22 @@
 import express from 'express';
 import cors from 'cors';
 import fetch from 'node-fetch';
-import path from 'path';
-import { fileURLToPath } from 'url';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
 
 const app = express();
 
 app.use(cors());
 app.use(express.json());
 
-// Melayani file frontend statis (index.html, app.js, css)
-app.use(express.static(__dirname));
-
-// Daftar instansi Cobalt API publik yang aktif
+// List API Cobalt Publik
 const COBALT_INSTANCES = [
   'https://api.cobalt.tools',
   'https://cobalt-api.kwiatekm.tokyo',
-  'https://cobalt.twi.tf',
-  'https://co.wuk.sh'
+  'https://co.wuk.sh',
+  'https://cobalt.twi.tf'
 ];
 
 async function fetchFromCobalt(url, isAudioOnly = false) {
   let lastError = null;
-  
   for (const instance of COBALT_INSTANCES) {
     try {
       const response = await fetch(instance, {
@@ -56,7 +47,7 @@ async function fetchFromCobalt(url, isAudioOnly = false) {
   throw lastError || new Error('Semua server pengunduh sedang sibuk.');
 }
 
-// Endpoint API Download
+// Endpoint POST /api/download
 app.post('/api/download', async (req, res) => {
   try {
     const { url, platform, format } = req.body;
@@ -113,7 +104,7 @@ app.post('/api/download', async (req, res) => {
   }
 });
 
-// Endpoint Proxy Stream Download
+// Endpoint GET /api/proxy-download
 app.get('/api/proxy-download', async (req, res) => {
   const fileUrl = req.query.url;
   const filename = req.query.filename || 'download.mp4';
@@ -133,11 +124,6 @@ app.get('/api/proxy-download', async (req, res) => {
   } catch (err) {
     res.redirect(fileUrl);
   }
-});
-
-// Route Fallback: Melayani index.html untuk semua akses non-API
-app.get('*', (req, res) => {
-  res.sendFile(path.join(__dirname, 'index.html'));
 });
 
 export default app;
