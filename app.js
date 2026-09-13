@@ -1,13 +1,8 @@
 /* ═══════════════════════════════════════
-   XV10 Downloader — App Logic v5
+  XV10 Downloader — Client Side Version
    by Faiz
 ═══════════════════════════════════════ */
 
-// ── CONFIG ────────────────────────────
-const BACKEND = (location.hostname === 'localhost' || location.hostname === '127.0.0.1')
-  ? `http://localhost:${location.port || 3000}` 
-  : 'https://namzx99.github.io/website-downloader-stiker/';
-  
 // ── STATE ─────────────────────────────
 const S = {
   platform: 'tiktok',
@@ -19,212 +14,14 @@ const S = {
   iqcFile: null,
   iqcFilter: 'none',
   iqcEmoji: '😀',
+  page: 'dl'
 };
-
-// ── HELPER UTAMA ────────────────────────────────────────────────
-const $ = id => document.getElementById(id);
-
-function makeHttps(url) {
-  return url ? url.replace(/^http:\/\//i, 'https://') : '';
-}
-
-// ── LOGIKA UTAMA DOWNLOAD ──────────────────────────────────────
-async function startDl() {
-  const urlEl = $('dlUrl');
-  const url = urlEl?.value?.trim();
-  
-  if (!url) { 
-    if (typeof toast === 'function') toast('Masukkan link video dulu!', 'error'); 
-    return; 
-  }
-
-  if (typeof resetDlUI === 'function') resetDlUI();
-  
-  const loadingEl = $('dlLoading');
-  const btnEl = $('dlBtn');
-  const errorEl = $('dlError');
-  const errorMsgEl = $('dlErrMsg');
-
-  if (loadingEl) loadingEl.style.display = 'block';
-  if (errorEl) errorEl.style.display = 'none';
-  if (btnEl) btnEl.disabled = true;
-
-  try {
-    let resultData = null;
-    const encodedUrl = encodeURIComponent(url);
-    const platform = window.S?.platform || detectPlatform(url);
-
-    // ── 1. PLATFORM TIKTOK ───────────────────────────────────────
-    if (platform === 'tiktok') {
-      if (!url.includes('tiktok.com')) {
-        throw new Error('Link yang dimasukkan bukan link TikTok yang valid!');
-      }
-
-      const providers = [
-        // Provider 1: TikWM Direct
-        async () => {
-          const res = await fetch(`https://www.tikwm.com/api/?url=${encodedUrl}`);
-          const j = await res.json();
-          if (j?.code === 0 && j?.data) {
-            return {
-              title: j.data.title || 'TikTok Video',
-              author: j.data.author?.nickname || 'TikTok User',
-              thumbnail: makeHttps(j.data.cover),
-              links: [
-                { label: 'Download Video (No WM)', url: makeHttps(j.data.play), filename: `tiktok-${Date.now()}.mp4` },
-                { label: 'Download Audio (MP3)', url: makeHttps(j.data.music), filename: `tiktok-audio-${Date.now()}.mp3` }
-              ].filter(l => l.url)
-            };
-          }
-          return null;
-        },
-        // Provider 2: TikWM via Proxy
-        async () => {
-          const target = `https://www.tikwm.com/api/?url=${encodedUrl}`;
-          const res = await fetch(`https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(target)}`);
-          const j = await res.json();
-          if (j?.code === 0 && j?.data) {
-            return {
-              title: j.data.title || 'TikTok Video',
-              author: j.data.author?.nickname || 'TikTok User',
-              thumbnail: makeHttps(j.data.cover),
-              links: [
-                { label: 'Download Video (No WM)', url: makeHttps(j.data.play), filename: `tiktok-${Date.now()}.mp4` },
-                { label: 'Download Audio (MP3)', url: makeHttps(j.data.music), filename: `tiktok-audio-${Date.now()}.mp3` }
-              ].filter(l => l.url)
-            };
-          }
-          return null;
-        }
-      ];
-
-      for (const getApiData of providers) {
-        try {
-          resultData = await getApiData();
-          if (resultData) break;
-        } catch (e) {}
-      }
-
-    // ── 2. PLATFORM YOUTUBE & INSTAGRAM ──────────────────────────
-    } else if (platform === 'youtube' || platform === 'instagram') {
-      const isYt = platform === 'youtube';
-      const isIg = platform === 'instagram';
-
-      if (isYt && !url.match(/(youtube\.com|youtu\.be)/i)) {
-        throw new Error('Link yang dimasukkan bukan link YouTube yang valid!');
-      }
-      if (isIg && !url.includes('instagram.com')) {
-        throw new Error('Link yang dimasukkan bukan link Instagram yang valid!');
-      }
-
-      // Menggunakan fallback API publik yang stabil untuk YT/IG
-      const apiUrl = `https://api.cobalt.tools/`;
-      const res = await fetch(apiUrl, {
-        method: 'POST',
-        headers: {
-          'Accept': 'application/json',
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          url: url,
-          videoQuality: '720',
-          downloadMode: 'auto'
-        })
-      });
-
-      const j = await res.json();
-      const mediaUrl = j?.url || j?.picker?.[0]?.url;
-
-      if (!mediaUrl) {
-        throw new Error('Gagal memproses media dari URL tersebut. Pastikan tautan publik.');
-      }
-
-      const prefix = isYt ? 'youtube' : 'instagram';
-      const titleName = isYt ? 'YouTube Video' : 'Instagram Media';
-
-      resultData = {
-        title: titleName,
-        author: platform.toUpperCase(),
-        thumbnail: '',
-        links: [
-          { label: 'Download Video (MP4)', url: mediaUrl, filename: `${prefix}-${Date.now()}.mp4` }
-        ]
-      };
-
-    } else {
-      throw new Error('Platform tidak didukung. Masukkan link TikTok, YouTube, atau Instagram.');
-    }
-
-    if (!resultData) {
-      throw new Error('Semua server downloader sedang padat. Coba beberapa detik lagi.');
-    }
-
-    if (loadingEl) loadingEl.style.display = 'none';
-    if (typeof renderDlResult === 'function') renderDlResult(resultData);
-
-  } catch (err) {
-    if (loadingEl) loadingEl.style.display = 'none';
-    if (errorEl) errorEl.style.display = 'block';
-    if (errorMsgEl) errorMsgEl.textContent = err.message || 'Gagal mengambil data video';
-    if (typeof toast === 'function') toast(err.message || 'Gagal mengambil data', 'error');
-  } finally {
-    if (btnEl) btnEl.disabled = false;
-  }
-}
-
-// ── DETEKSI PLATFORM OTOMATIS ──────────────────────────────────
-function detectPlatform(url) {
-  if (url.includes('tiktok.com')) return 'tiktok';
-  if (url.includes('instagram.com')) return 'instagram';
-  if (url.match(/(youtube\.com|youtu\.be)/i)) return 'youtube';
-  return '';
-}
-
-// ── PROXY DOWNLOAD FILE DIRECT KE HP/PC ─────────────────────────
-async function proxyDownload(fileUrl, filename, btn) {
-  if (!btn) return;
-  const origText = btn.innerHTML;
-  btn.disabled = true; 
-  btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Mengunduh...';
-
-  try {
-    // 1. Coba fetch blob langsung
-    const res = await fetch(fileUrl);
-    if (!res.ok) throw new Error('CORS or Network issue');
-    const blob = await res.blob();
-    
-    const blobUrl = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = blobUrl;
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    
-    setTimeout(() => URL.revokeObjectURL(blobUrl), 10000);
-    if (typeof toast === 'function') toast('Unduhan dimulai!', 'success');
-  } catch (err) {
-    // 2. Fallback: Buka link langsung jika fetch blob diblokir browser/CORS
-    const a = document.createElement('a');
-    a.href = fileUrl;
-    a.target = '_blank';
-    a.rel = 'noopener noreferrer';
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    if (typeof toast === 'function') toast('Membuka tautan unduhan...', 'success');
-  } finally { 
-    btn.disabled = false; 
-    btn.innerHTML = origText; 
-  }
-}
 
 const $ = id => document.getElementById(id);
 const $$ = s => document.querySelectorAll(s);
 const esc = s => { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; };
 const now = () => new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
-const fmtBytes = b => b < 1024 ? b + ' B' : b < 1048576 ? (b/1024).toFixed(1) + ' KB' : (b/1048576).toFixed(1) + ' MB';
+const makeHttps = u => u ? u.replace(/^http:\/\//i, 'https://') : '';
 
 function wrapText(ctx, text, maxW) {
   const words = text.split(' ');
@@ -246,15 +43,18 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 /* ══════════════════════════════════════
-    NAV
+   NAVIGASI
 ══════════════════════════════════════ */
 function initNav() {
   $$('.sb-link, .bn').forEach(b => {
-    b.addEventListener('click', () => { const p = b.dataset.p; if (p) { goTo(p); closeSidebar(); } });
+    b.addEventListener('click', () => { 
+      const p = b.dataset.p; 
+      if (p) { goTo(p); closeSidebar(); } 
+    });
   });
   $('menuBtn')?.addEventListener('click', () => {
-    document.getElementById('sidebar').classList.add('open');
-    $('mobOverlay').classList.add('show');
+    $('sidebar')?.classList.add('open');
+    $('mobOverlay')?.classList.add('show');
   });
   $('mobOverlay')?.addEventListener('click', closeSidebar);
 }
@@ -263,23 +63,25 @@ function goTo(p) {
   S.page = p;
   $$('.page').forEach(x => x.classList.remove('active'));
   $$('.sb-link, .bn').forEach(x => x.classList.remove('active'));
-  document.getElementById(`page-${p}`)?.classList.add('active');
+  $(`page-${p}`)?.classList.add('active');
   $$(`[data-p="${p}"]`).forEach(x => x.classList.add('active'));
 }
+
 function closeSidebar() {
-  document.getElementById('sidebar').classList.remove('open');
-  $('mobOverlay').classList.remove('show');
+  $('sidebar')?.classList.remove('open');
+  $('mobOverlay')?.classList.remove('show');
 }
 
 /* ══════════════════════════════════════
-    MAKER
+   MAKER (STIKER, BRAT, IQC)
 ══════════════════════════════════════ */
 function initMaker() {
   $$('.tab-btn').forEach(b => b.addEventListener('click', () => {
     $$('.tab-btn').forEach(x => x.classList.remove('active'));
     $$('.tab-pane').forEach(x => x.classList.remove('active'));
-    b.classList.add('active'); S.makerTab = b.dataset.tab;
-    document.getElementById(`tab-${b.dataset.tab}`)?.classList.add('active');
+    b.classList.add('active'); 
+    S.makerTab = b.dataset.tab;
+    $(`tab-${b.dataset.tab}`)?.classList.add('active');
   }));
   initStikerMaker();
   initBratMaker();
@@ -290,17 +92,27 @@ function initMaker() {
 function initStikerMaker() {
   $('stkSize')?.addEventListener('input', e => { $('stkSizeVal').textContent = e.target.value; });
   $$('.cp').forEach(cp => {
-    cp.addEventListener('click', () => { $$('.cp').forEach(x => x.classList.remove('active')); cp.classList.add('active'); $('stkColor').value = cp.dataset.c; });
+    cp.addEventListener('click', () => { 
+      $$('.cp').forEach(x => x.classList.remove('active')); 
+      cp.classList.add('active'); 
+      $('stkColor').value = cp.dataset.c; 
+    });
   });
   $$('#bgGrid .bg-opt').forEach(b => {
     b.addEventListener('click', () => {
-      $$('#bgGrid .bg-opt').forEach(x => x.classList.remove('active')); b.classList.add('active');
+      $$('#bgGrid .bg-opt').forEach(x => x.classList.remove('active')); 
+      b.classList.add('active');
       S.stkBg = b.dataset.bg;
       $('solidColor').style.display = S.stkBg === 'solid' ? 'block' : 'none';
     });
   });
   $$('#fontStylePills .pill').forEach(b => {
-    b.addEventListener('click', () => { $$('#fontStylePills .pill').forEach(x => x.classList.remove('active')); b.classList.add('active'); S.stkFw = b.dataset.fw; S.stkFs = b.dataset.fs; });
+    b.addEventListener('click', () => { 
+      $$('#fontStylePills .pill').forEach(x => x.classList.remove('active')); 
+      b.classList.add('active'); 
+      S.stkFw = b.dataset.fw; 
+      S.stkFs = b.dataset.fs; 
+    });
   });
   $('btnMakeStiker')?.addEventListener('click', renderStiker);
   $('btnDlStiker')?.addEventListener('click', () => dlCanvas('stikerCanvas', `stiker-${Date.now()}.png`, 'image/png'));
@@ -316,14 +128,26 @@ function renderStiker() {
   canvas.width = size; canvas.height = size;
   const ctx = canvas.getContext('2d');
   ctx.clearRect(0, 0, size, size);
-  const bgMap = { g1:['#667eea','#764ba2'], g2:['#f093fb','#f5576c'], g3:['#4facfe','#00f2fe'], g4:['#43e97b','#38f9d7'], g5:['#fa8231','#f7b731'], g6:['#2d3436','#636e72'] };
+  
+  const bgMap = { 
+    g1:['#667eea','#764ba2'], g2:['#f093fb','#f5576c'], 
+    g3:['#4facfe','#00f2fe'], g4:['#43e97b','#38f9d7'], 
+    g5:['#fa8231','#f7b731'], g6:['#2d3436','#636e72'] 
+  };
+  
   if (S.stkBg === 'solid') {
     ctx.fillStyle = $('solidColor').value;
-    ctx.beginPath(); if (ctx.roundRect) ctx.roundRect(0,0,size,size,size*.07); else ctx.rect(0,0,size,size); ctx.fill();
+    ctx.beginPath(); 
+    if (ctx.roundRect) ctx.roundRect(0,0,size,size,size*.07); else ctx.rect(0,0,size,size); 
+    ctx.fill();
   } else if (bgMap[S.stkBg]) {
-    const g = ctx.createLinearGradient(0,0,size,size); g.addColorStop(0,bgMap[S.stkBg][0]); g.addColorStop(1,bgMap[S.stkBg][1]);
-    ctx.fillStyle = g; ctx.beginPath(); if (ctx.roundRect) ctx.roundRect(0,0,size,size,size*.07); else ctx.rect(0,0,size,size); ctx.fill();
+    const g = ctx.createLinearGradient(0,0,size,size); 
+    g.addColorStop(0,bgMap[S.stkBg][0]); g.addColorStop(1,bgMap[S.stkBg][1]);
+    ctx.fillStyle = g; ctx.beginPath(); 
+    if (ctx.roundRect) ctx.roundRect(0,0,size,size,size*.07); else ctx.rect(0,0,size,size); 
+    ctx.fill();
   }
+  
   const fs = parseInt($('stkSize')?.value) || 60;
   ctx.font = `${S.stkFs} ${S.stkFw} ${fs}px Inter,Arial,sans-serif`;
   ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
@@ -332,11 +156,18 @@ function renderStiker() {
   const totalH = lines.length * lh;
   const sy = (size - totalH) / 2 + fs / 2;
   const outW = parseInt($('stkOutline')?.value) || 0;
-  if (outW > 0) { ctx.strokeStyle = $('stkOutlineColor')?.value || '#000'; ctx.lineWidth = outW*2; ctx.lineJoin = 'round'; lines.forEach((l,i) => ctx.strokeText(l, size/2, sy + i*lh)); }
+  
+  if (outW > 0) { 
+    ctx.strokeStyle = $('stkOutlineColor')?.value || '#000'; 
+    ctx.lineWidth = outW*2; ctx.lineJoin = 'round'; 
+    lines.forEach((l,i) => ctx.strokeText(l, size/2, sy + i*lh)); 
+  }
+  
   ctx.fillStyle = $('stkColor')?.value || '#fff';
   lines.forEach((l,i) => ctx.fillText(l, size/2, sy + i*lh));
-  $('stikerPh').classList.add('hidden');
-  $('stikerActions').style.display = 'flex';
+  
+  $('stikerPh')?.classList.add('hidden');
+  if ($('stikerActions')) $('stikerActions').style.display = 'flex';
   toast('Stiker siap! ✨', 'success');
 }
 
@@ -376,7 +207,8 @@ function initBratMaker() {
     const lh = fs * 1.3; const totalH = lines.length * lh; const sy = (cH - totalH) / 2 + fs / 2;
     lines.forEach((l,i) => ctx.fillText(l, cW/2, sy + i*lh));
     ctx.filter = 'none';
-    $('bratPh').classList.add('hidden'); $('bratActions').style.display = 'flex';
+    $('bratPh')?.classList.add('hidden'); 
+    if ($('bratActions')) $('bratActions').style.display = 'flex';
   }
 }
 
@@ -389,6 +221,7 @@ let iqcBubbleColor = 'out';
 function initIqcMaker() {
   const picker = $('iqcEmojiPicker');
   if (picker) {
+    picker.innerHTML = '';
     IQC_EMOJIS.forEach(em => {
       const btn = document.createElement('button');
       btn.className = 'emoji-btn' + (S_iqcReact.includes(em) ? ' active' : '');
@@ -513,14 +346,6 @@ function renderIqc() {
   ctx.fillStyle = bgGrad;
   roundRect(ctx, 0, 0, canvasW, canvasH, 22);
   ctx.fill();
-  ctx.save();
-  ctx.filter = 'blur(28px)';
-  ctx.globalAlpha = .35;
-  ctx.fillStyle = '#1f6d5c';
-  ctx.beginPath(); ctx.ellipse(canvasW * .8, canvasH * .25, 90, 60, 0, 0, Math.PI * 2); ctx.fill();
-  ctx.fillStyle = '#3a3a3a';
-  ctx.beginPath(); ctx.ellipse(canvasW * .15, canvasH * .7, 100, 70, 0, 0, Math.PI * 2); ctx.fill();
-  ctx.restore();
 
   const pillX = (canvasW - reactPillW) / 2, pillY = topPad;
   ctx.save();
@@ -592,10 +417,9 @@ function renderIqc() {
   }
 
   $('iqcPh')?.classList.add('hidden');
-  $('iqcActions') && ($('iqcActions').style.display = 'flex');
+  if ($('iqcActions')) $('iqcActions').style.display = 'flex';
 }
 
-/* ────── Share ke WA langsung ────── */
 async function shareToWA(canvasId, filename) {
   const canvas = $(canvasId);
   if (!canvas) return;
@@ -615,17 +439,16 @@ async function shareToWA(canvasId, filename) {
     if (navigator.clipboard?.write) {
       try {
         await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
-        toast('Gambar di-copy ke clipboard! Buka WA → Tempel', 'success');
+        toast('Gambar di-copy ke clipboard! Tempel langsung di WA', 'success');
         return;
       } catch {}
     }
 
     dlCanvas(canvasId, filename, 'image/png');
-    toast('Tersimpan! Kirim file tersebut ke WA', 'info');
+    toast('Tersimpan! Silakan bagikan manual', 'info');
   }, 'image/png', 0.95);
 }
 
-/* ────── Canvas download ────── */
 function dlCanvas(canvasId, filename, mime = 'image/png') {
   const canvas = $(canvasId); if (!canvas) return;
   canvas.toBlob(blob => {
@@ -638,7 +461,7 @@ function dlCanvas(canvasId, filename, mime = 'image/png') {
 }
 
 /* ══════════════════════════════════════
-    DOWNLOADER UI LOGIC
+   DOWNLOADER ENGINE (FULL CLIENT-SIDE)
 ══════════════════════════════════════ */
 function initDownloader() {
   $$('.plat-tab').forEach(b => b.addEventListener('click', () => {
@@ -669,8 +492,8 @@ const DL_META = {
 
 function updateDlUI(plat) {
   const m = DL_META[plat];
-  if (!m) return;
-  const icon = $('dlIcon'); if (icon) { icon.className = `dl-icon ${m.cls}`; icon.innerHTML = m.icon; }
+  const icon = $('dlIcon'); 
+  if (icon) { icon.className = `dl-icon ${m.cls}`; icon.innerHTML = m.icon; }
   if ($('dlTitle')) $('dlTitle').textContent = m.title; 
   if ($('dlSub')) $('dlSub').textContent = m.sub;
   if ($('dlUrl')) $('dlUrl').placeholder = m.ph;
@@ -690,61 +513,136 @@ function resetDlUI() {
 }
 window.resetDl = resetDlUI;
 
+// PROSES DOWNLOAD UTAMA DIRECT CLIENT-SIDE
+async function startDl() {
+  const url = $('dlUrl')?.value?.trim();
+  if (!url) { toast('Masukkan link video dulu!', 'error'); return; }
+  
+  resetDlUI();
+  $('dlLoading').style.display = 'block';
+  $('dlBtn').disabled = true;
+
+  try {
+    const encodedUrl = encodeURIComponent(url);
+    let data = null;
+
+    // ── 1. TIKTOK ──
+    if (S.platform === 'tiktok') {
+      const res = await fetch(`https://www.tikwm.com/api/?url=${encodedUrl}`);
+      const j = await res.json();
+      
+      if (j && j.code === 0 && j.data) {
+        data = {
+          title: j.data.title || 'TikTok Video',
+          author: j.data.author?.nickname || 'TikTok User',
+          thumbnail: makeHttps(j.data.cover),
+          links: [
+            { label: 'Download Video (No WM)', url: makeHttps(j.data.play), filename: `tiktok-${Date.now()}.mp4` },
+            { label: 'Download Audio (MP3)', url: makeHttps(j.data.music), filename: `tiktok-audio-${Date.now()}.mp3` }
+          ].filter(l => l.url)
+        };
+      } else {
+        throw new Error('Gagal mengambil data TikTok. Pastikan link video publik.');
+      }
+
+    // ── 2. INSTAGRAM & YOUTUBE ──
+    } else {
+      const res = await fetch('https://api.cobalt.tools/', {
+        method: 'POST',
+        headers: { 
+          'Accept': 'application/json', 
+          'Content-Type': 'application/json' 
+        },
+        body: JSON.stringify({ 
+          url: url, 
+          videoQuality: '720', 
+          downloadMode: S.format === 'mp3' ? 'audio' : 'auto' 
+        })
+      });
+      
+      const j = await res.json();
+      const mediaUrl = j?.url || j?.picker?.[0]?.url;
+
+      if (!mediaUrl) {
+        throw new Error('Gagal memproses media. Coba cek link kamu.');
+      }
+
+      data = {
+        title: S.platform.toUpperCase() + ' Media',
+        author: S.platform.toUpperCase(),
+        thumbnail: '',
+        links: [
+          { label: `Download ${S.format.toUpperCase()}`, url: mediaUrl, filename: `${S.platform}-${Date.now()}.${S.format}` }
+        ]
+      };
+    }
+
+    $('dlLoading').style.display = 'none';
+    renderDlResult(data);
+
+  } catch (err) {
+    $('dlLoading').style.display = 'none';
+    $('dlError').style.display = 'block';
+    $('dlErrMsg').textContent = err.message || 'Gagal memproses video';
+    toast(err.message || 'Gagal mengambil data', 'error');
+  } finally { 
+    $('dlBtn').disabled = false; 
+  }
+}
+
 function renderDlResult(data) {
-  if ($('dlThumb')) $('dlThumb').src = data.thumbnail || 'https://placehold.co/130x90/0c0e1c/7c6fff?text=Video';
-  if ($('dlResTitle')) $('dlResTitle').textContent = data.title || 'Video';
+  $('dlThumb').src = data.thumbnail || 'https://placehold.co/130x90/0c0e1c/7c6fff?text=Media';
+  $('dlResTitle').textContent = data.title || 'Media Video';
   let meta = data.platform || S.platform;
   if (data.author) meta += ' · ' + data.author;
   if (data.duration) meta += ' · ' + data.duration;
-  if ($('dlResMeta')) $('dlResMeta').textContent = meta;
+  $('dlResMeta').textContent = meta;
   
   const btns = $('dlrBtns'); 
-  if (btns) {
-    btns.innerHTML = '';
-    if (data.fallback && data.message) {
-      const n = document.createElement('div'); n.className = 'fallback-note';
-      n.innerHTML = `<i class="fa-solid fa-triangle-exclamation"></i> ${data.message}`; 
-      btns.appendChild(n);
-    }
-    (data.links || []).forEach(lnk => {
-      const isFb = lnk.fallback || lnk.label.startsWith('🌐');
-      const btn = document.createElement('button');
-      btn.className = 'dlr-btn' + (isFb ? ' fb' : '');
-      btn.innerHTML = `<i class="fa-solid ${isFb ? 'fa-arrow-up-right-from-square' : 'fa-download'}"></i> ${lnk.label}`;
-      btn.addEventListener('click', () => { 
-        isFb ? window.open(lnk.url, '_blank') : proxyDownload(lnk.url, lnk.filename || 'video.mp4', btn); 
-      });
-      btns.appendChild(btn);
-    });
-  }
-  
-  if ($('dlResult')) $('dlResult').style.display = 'block';
-  toast(data.fallback ? 'Klik tombol untuk download 🔗' : 'Siap didownload! 🎉', data.fallback ? 'info' : 'success');
+  btns.innerHTML = '';
+
+  (data.links || []).forEach(lnk => {
+    const btn = document.createElement('button');
+    btn.className = 'dlr-btn';
+    btn.innerHTML = `<i class="fa-solid fa-download"></i> ${lnk.label}`;
+    btn.addEventListener('click', () => { proxyDownload(lnk.url, lnk.filename || 'media.mp4', btn); });
+    btns.appendChild(btn);
+  });
+
+  $('dlResult').style.display = 'block';
+  toast('Siap didownload! 🎉', 'success');
 }
 
 async function proxyDownload(fileUrl, filename, btn) {
   const orig = btn.innerHTML;
   btn.disabled = true; 
   btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Mengunduh...';
-  
+
   try {
-    // Mencoba fetch blob (berhasil jika CDN mendukung CORS)
     const res = await fetch(fileUrl);
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    if (!res.ok) throw new Error('CORS Limit');
     const blob = await res.blob();
     const bUrl = URL.createObjectURL(blob);
+    
     const a = document.createElement('a'); 
     a.href = bUrl; 
     a.download = filename;
     document.body.appendChild(a); 
     a.click(); 
     document.body.removeChild(a);
+    
     setTimeout(() => URL.revokeObjectURL(bUrl), 5000);
     toast('Download berhasil! ✅', 'success');
   } catch (err) {
-    // Fallback otomatis ke tab baru jika terhalang CORS
-    toast('Membuka file langsung di tab baru...', 'info');
-    window.open(fileUrl, '_blank');
+    // Jika diblokir oleh CORS browser, fallback buka langsung file URL-nya
+    const a = document.createElement('a'); 
+    a.href = fileUrl; 
+    a.target = '_blank';
+    a.rel = 'noopener noreferrer';
+    document.body.appendChild(a); 
+    a.click(); 
+    document.body.removeChild(a);
+    toast('Membuka tautan file...', 'info');
   } finally { 
     btn.disabled = false; 
     btn.innerHTML = orig; 
@@ -752,38 +650,18 @@ async function proxyDownload(fileUrl, filename, btn) {
 }
 
 /* ══════════════════════════════════════
-    TOAST & UTILS
+   TOAST NOTIFIKASI
 ══════════════════════════════════════ */
 function toast(msg, type = 'info') {
   const icons = { success:'fa-circle-check', error:'fa-circle-exclamation', info:'fa-circle-info' };
-  const el = document.createElement('div'); el.className = `toast ${type}`;
+  const el = document.createElement('div'); 
+  el.className = `toast ${type}`;
   el.innerHTML = `<i class="fa-solid ${icons[type]||icons.info}"></i><span>${esc(msg)}</span>`;
   $('toasts')?.appendChild(el);
-  setTimeout(() => { el.style.transition='all .28s ease'; el.style.opacity='0'; el.style.transform='translateX(16px)'; setTimeout(()=>el.remove(),280); }, 3400);
-}
-
-function toBase64(file) { return new Promise((res,rej) => { const r=new FileReader(); r.onload=()=>res(r.result.split(',')[1]); r.onerror=rej; r.readAsDataURL(file); }); }
-function ficon(f) {
-  if (f.type.startsWith('image/')) return { cls:'fi-img', icon:'fa-solid fa-image' };
-  if (f.type === 'application/pdf') return { cls:'fi-pdf', icon:'fa-solid fa-file-pdf' };
-  if (f.type.includes('word') || f.name.match(/\.docx?$/)) return { cls:'fi-doc', icon:'fa-solid fa-file-word' };
-  if (f.type === 'text/plain') return { cls:'fi-txt', icon:'fa-solid fa-file-lines' };
-  return { cls:'fi-oth', icon:'fa-solid fa-file' };
-}
-function mdToHtml(t) {
-  if (!t) return '';
-  return t
-    .replace(/```(\w+)?\n([\s\S]*?)```/g, (_,l,c) => `<pre><code>${esc(c.trim())}</code></pre>`)
-    .replace(/`([^`]+)`/g, '<code>$1</code>')
-    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-    .replace(/\*(.+?)\*/g, '<em>$1</em>')
-    .replace(/^### (.+)$/gm, '<h3>$1</h3>')
-    .replace(/^## (.+)$/gm, '<h2>$1</h2>')
-    .replace(/^# (.+)$/gm, '<h2>$1</h2>')
-    .replace(/\[(.+?)\]\((.+?)\)/g, '<a href="$2" target="_blank">$1</a>')
-    .replace(/^\- (.+)$/gm, '<li>$1</li>')
-    .replace(/(<li>.*?<\/li>\n?)+/gs, m => `<ul>${m}</ul>`)
-    .replace(/^\d+\. (.+)$/gm, '<li>$1</li>')
-    .replace(/\n\n/g, '<br><br>')
-    .replace(/\n/g, '<br>');
+  setTimeout(() => { 
+    el.style.transition='all .28s ease'; 
+    el.style.opacity='0'; 
+    el.style.transform='translateX(16px)'; 
+    setTimeout(()=>el.remove(), 280); 
+  }, 3400);
 }
