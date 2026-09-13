@@ -1,31 +1,14 @@
 {
   "version": 2,
-  "builds": [
-    {
-      "src": "api/index.js",
-      "use": "@vercel/node",
-      "config": {
-        "includeFiles": [
-          "index.html",
-          "style.css",
-          "app.js",
-          "server.js"
-        ],
-        "maxDuration": 60
-      }
+  "functions": {
+    "api/index.js": {
+      "includeFiles": [
+        "index.html",
+        "style.css",
+        "app.js",
+        "server.js"
+      ],
+      "maxDuration": 60
     }
-  ],
-  "routes": [
-    {
-      "src": "/api/(.*)",
-      "dest": "/api/index.js"
-    },
-    {
-      "handle": "filesystem"
-    },
-    {
-      "src": "/(.*)",
-      "dest": "/api/index.js"
-    }
-  ]
+  }
 }
