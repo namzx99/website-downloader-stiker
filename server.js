@@ -1,5 +1,5 @@
 /**
- * XV10 Downloader — Backend Server v6 (Fixed Cobalt & yt-dlp)
+ * XV10 Downloader — Backend Server v6.1 (Vercel & Cobalt API Fixed)
  * by Faiz
  */
 
@@ -25,7 +25,7 @@ app.use(express.static(__dirname, { index: 'index.html' }));
 // ── Upload ────────────────────────────────────────────────
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
-    const dir = path.join(__dirname, 'uploads');
+    const dir = process.env.VERCEL ? '/tmp' : path.join(__dirname, 'uploads');
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
     cb(null, dir);
   },
@@ -36,7 +36,7 @@ app.post('/api/upload', upload.array('files', 10), (req, res) => {
   if (!req.files?.length) return res.status(400).json({ error: 'Tidak ada file' });
   res.json({ success: true, files: req.files.map(f => ({ originalName: f.originalname, url: `/uploads/${f.filename}`, size: f.size })) });
 });
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+app.use('/uploads', express.static(process.env.VERCEL ? '/tmp' : path.join(__dirname, 'uploads')));
 
 // ════════════════════════════════════════════════════════
 // DOWNLOAD API POST /api/download
@@ -100,7 +100,7 @@ function getStrategies(url, plat, format) {
 function doReq(opts, body = null, ms = 20000) {
   return new Promise((resolve, reject) => {
     const lib = (opts.hostname || '').startsWith('http:') ? http : https;
-    const req = (opts.protocol === 'http:' ? http : https).request(opts, resp => {
+    const req = lib.request(opts, resp => {
       const chunks = [];
       resp.on('data', c => chunks.push(c));
       resp.on('end', () => resolve({ status: resp.statusCode, headers: resp.headers, body: Buffer.concat(chunks).toString() }));
@@ -112,7 +112,7 @@ function doReq(opts, body = null, ms = 20000) {
   });
 }
 
-// ── Cobalt API (Downloader Universal: IG, YT, TikTok, dll) ──
+// ── Cobalt API (Downloader Universal: IG, YT, TikTok) ─────
 async function dlCobalt(url, format) {
   const payload = JSON.stringify({
     url: url,
@@ -168,7 +168,7 @@ async function dlCobalt(url, format) {
   };
 }
 
-// ── TikWM (Khusus TikTok) ──────────────────────────────────
+// ── TikWM (TikTok Special) ─────────────────────────────────
 async function dlTikwm(url, format) {
   const body = new URLSearchParams({ url, hd: '1' }).toString();
   const r = await doReq({
@@ -192,7 +192,7 @@ async function dlTikwm(url, format) {
   return { title: d.title || 'TikTok', thumbnail: d.cover || '', platform: 'TikTok', author: d.author?.nickname || '', duration: d.duration ? d.duration + 's' : '', links };
 }
 
-// ── yt-dlp (Fallback Lokal) ────────────────────────────────
+// ── yt-dlp (Lokal Fallback) ────────────────────────────────
 function dlYtdlp(url, format) {
   return new Promise((resolve, reject) => {
     const localExe = process.platform === 'win32'
@@ -293,27 +293,19 @@ function detectPlatform(url) {
   return 'Video';
 }
 
-app.get('/api/health', (req, res) => res.json({ ok: true, v: '6.0.0' }));
+app.get('/api/health', (req, res) => res.json({ ok: true, v: '6.1.0' }));
 app.get('/style.css', (req, res) => res.sendFile(path.join(__dirname, 'style.css')));
 app.get('/app.js', (req, res) => res.sendFile(path.join(__dirname, 'app.js')));
-app.get(/.*/, (req, res) => res.sendFile(path.join(__dirname, 'index.html')));
 
-process.on('uncaughtException', err => {
-  console.error('\n❌ UNCAUGHT ERROR — server berhenti karena ini:\n', err);
-  process.exit(1);
-});
-process.on('unhandledRejection', err => {
-  console.error('\n❌ UNHANDLED REJECTION — server berhenti karena ini:\n', err);
-  process.exit(1);
-});
-
+// Export app untuk Vercel Serverless Function
 module.exports = app;
 
-if (require.main === module) {
-  const server = app.listen(PORT, () => console.log(`\n  ⚡ XV10 Downloader v6 → http://localhost:${PORT}\n`));
+// Hanya jalankan server lokal jika TIDAK berada di lingkungan Vercel
+if (require.main === module && !process.env.VERCEL) {
+  const server = app.listen(PORT, () => console.log(`\n  ⚡ XV10 Downloader v6.1 → http://localhost:${PORT}\n`));
   server.on('error', err => {
     if (err.code === 'EADDRINUSE') {
-      console.error(`\n❌ Port ${PORT} udah dipakai proses lain! Tutup dulu proses node yang lama.\n`);
+      console.error(`\n❌ Port ${PORT} sudah dipakai!\n`);
     } else {
       console.error('\n❌ Gagal start server:\n', err);
     }
